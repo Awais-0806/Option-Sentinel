@@ -31,6 +31,7 @@ from core.interfaces.broker import BrokerAdapter
 from core.models.risk import RiskVerdict
 from core.models.trade import SizeTier, TradeJournalEntry
 from agents.regime.classifier import RegimeClassifier
+from agents.options_analyst.validator import OptionContractValidator
 from agents.strategy.selector import StrategySelector
 from risk.limits import PortfolioState, RiskPolicy, TradeRiskRequest
 from risk.veto import RiskSentinel
@@ -66,6 +67,7 @@ def run_pipeline(
     result = PipelineResult()
 
     regime_classifier = RegimeClassifier()
+    contract_validator = OptionContractValidator(settings)
     strategy_selector = StrategySelector(settings)
     risk_sentinel = RiskSentinel(settings, RiskPolicy(name="default"))
 
@@ -89,6 +91,12 @@ def run_pipeline(
         )
 
         chain = broker.get_option_chain(symbol, min_dte=14, max_dte=45)
+        chain, rejections = contract_validator.filter_chain(chain)
+        if rejections:
+            logger.info(
+                "CONTRACTS_REJECTED symbol=%s count=%d sample_reasons=%s",
+                symbol, len(rejections), [r.reasons[0] for r in rejections[:3]],
+            )
         ctx = StrategyContext(
             symbol=symbol,
             underlying_price=bars[-1].close if bars else 0.0,
