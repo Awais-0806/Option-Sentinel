@@ -17,7 +17,7 @@ into a live paper account or a mock for offline development.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
 from typing import Protocol
 
 from core.models.market import PriceBar

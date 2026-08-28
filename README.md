@@ -92,13 +92,17 @@ make test-integration  # requires real paper credentials; auto-skips otherwise
 
 ## How to enable dry-run / how to safely execute paper trades
 
-`EXECUTION_MODE` in `.env` has three values:
+`EXECUTION_MODE` in `.env` has five values, and it is the **single source of truth** for both adapter selection (`integrations/broker_factory.py`) and order-submission gating (`core/orchestration/pipeline.py`):
 
-- `DRY_RUN` (default) — full pipeline runs, nothing touches Alpaca, everything is journaled
-- `SIMULATION` — orders are priced/validated against live quotes but never submitted
-- `PAPER_EXECUTION` — orders are actually submitted to your Alpaca **paper** account
+| Mode | Adapter | Submits orders? |
+|---|---|---|
+| `DRY_RUN` (default) | Mock | Never |
+| `PAPER_SIMULATION` | Mock | Never |
+| `PAPER_MANUAL_APPROVAL` | Real Alpaca (paper) | Never — builds & risk-checks real trades, then stops and waits (approval UI not yet built; see Known Limitations) |
+| `PAPER_AUTONOMOUS` | Real Alpaca (paper) | Yes, for APPROVE/REDUCE_SIZE verdicts |
+| `LIVE` | — | Hard-blocked unconditionally, no exceptions |
 
-The operator must explicitly change `EXECUTION_MODE` — the system never escalates itself.
+The operator must explicitly change `EXECUTION_MODE` — the system never escalates itself. `PAPER_MANUAL_APPROVAL`/`PAPER_AUTONOMOUS` also refuse to start if `ALPACA_API_KEY`/`ALPACA_SECRET_KEY` are missing or still contain the `.env.example` placeholder values — see `integrations/broker_factory.py`.
 
 ## Architecture diagram
 

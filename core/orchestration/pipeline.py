@@ -5,9 +5,11 @@ End-to-end pipeline (Milestone 10):
   -> (Simulated) Execution -> Journal
 
 The default EXECUTION_MODE is DRY_RUN, enforced by Settings, not by
-convention here — this module will happily run in SIMULATION or
-PAPER_EXECUTION too, but Settings.execution_mode decides which one
-without any code change.
+convention here — this module runs identically across DRY_RUN,
+PAPER_SIMULATION, PAPER_MANUAL_APPROVAL, and PAPER_AUTONOMOUS.
+Settings.execution_mode (via broker_factory for adapter selection, and
+_maybe_submit() below for order-submission gating) decides which one
+without any code change here.
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ from core.events.logging_config import (
 )
 from core.interfaces.broker import BrokerAdapter
 from core.models.risk import RiskVerdict
-from core.models.trade import TradeJournalEntry
+from core.models.trade import SizeTier, TradeJournalEntry
 from agents.regime.classifier import RegimeClassifier
 from agents.strategy.selector import StrategySelector
 from risk.limits import PortfolioState, RiskPolicy, TradeRiskRequest
@@ -110,7 +112,6 @@ def run_pipeline(
         )
 
         # No-trade tier is a legitimate outcome — journal it, don't risk-check it.
-        from core.models.trade import SizeTier
         if candidate.size_tier == SizeTier.NO_TRADE:
             result.add(_journal_entry(candidate, regime, risk_decision="NO_TRADE",
                                        risk_reasons=("score below SCORE_NO_TRADE_MAX",)))
@@ -129,19 +130,9 @@ def run_pipeline(
             logger.info(EVENT_RISK_APPROVED, extra={"event": EVENT_RISK_APPROVED,
                         "context": {"trade_id": candidate.trade_id, "verdict": decision.verdict.value}})
 
-            order_status = "SKIPPED_DRY_RUN"
-            order_id = None
-            if settings.execution_mode == ExecutionMode.PAPER_EXECUTION:
-                order = broker.submit_order(
-                    legs=list(candidate.legs),
-                    quantity=decision.approved_quantity or 1,
-                    client_order_id=client_order_id,
-                    limit_price=None,
-                )
-                order_status = order.status
-                order_id = order.order_id
-                logger.info(EVENT_ORDER_SUBMITTED, extra={"event": EVENT_ORDER_SUBMITTED,
-                            "context": {"order_id": order_id, "status": order_status}})
+            order_status, order_id = _maybe_submit(
+                settings, broker, candidate, decision, client_order_id
+            )
 
             result.add(_journal_entry(
                 candidate, regime,
@@ -162,6 +153,48 @@ def run_pipeline(
     logger.info(EVENT_MARKET_SCAN_COMPLETED, extra={"event": EVENT_MARKET_SCAN_COMPLETED,
                 "context": {"opportunities_found": len(result.journal_entries)}})
     return result
+
+
+def _maybe_submit(settings, broker, candidate, decision, client_order_id):
+    """
+    Order submission is gated strictly by execution_mode, mirroring the
+    same mode ladder broker_factory.get_broker_adapter() uses for adapter
+    selection:
+
+        DRY_RUN / PAPER_SIMULATION   -> never submit; broker is the mock
+                                         adapter anyway (belt-and-braces).
+        PAPER_MANUAL_APPROVAL        -> build + risk-check, but STOP here
+                                         and wait for explicit operator
+                                         approval (see Phase E — approval
+                                         UI/CLI not yet implemented; the
+                                         pipeline correctly refuses to
+                                         auto-submit in this mode today).
+        PAPER_AUTONOMOUS             -> approved trades submit automatically.
+
+    Returns (order_status, order_id).
+    """
+    if settings.execution_mode == ExecutionMode.PAPER_MANUAL_APPROVAL:
+        logger.info(
+            "AWAITING_MANUAL_APPROVAL trade_id=%s — built and risk-checked, "
+            "not submitted (manual approval flow not yet implemented)",
+            candidate.trade_id,
+        )
+        return "AWAITING_MANUAL_APPROVAL", None
+
+    if settings.execution_mode != ExecutionMode.PAPER_AUTONOMOUS:
+        return "SKIPPED_DRY_RUN", None
+
+    order = broker.submit_order(
+        legs=list(candidate.legs),
+        quantity=decision.approved_quantity or 1,
+        client_order_id=client_order_id,
+        limit_price=None,
+    )
+    logger.info(
+        EVENT_ORDER_SUBMITTED,
+        extra={"event": EVENT_ORDER_SUBMITTED, "context": {"order_id": order.order_id, "status": order.status}},
+    )
+    return order.status, order.order_id
 
 
 def _journal_entry(

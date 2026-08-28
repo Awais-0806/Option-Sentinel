@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 
 from core.config.settings import Settings
-from core.models.trade import SizeTier, TradeCandidate
+from core.models.trade import TradeCandidate
 from strategies.base import Strategy, StrategyContext
 from strategies.bear_put_spread import BearPutSpreadStrategy
 from strategies.bull_call_spread import BullCallSpreadStrategy

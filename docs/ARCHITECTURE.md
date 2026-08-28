@@ -90,6 +90,6 @@ Every threshold — risk limits, scoring weights, size-tier cutoffs — lives in
 ## Safety gates
 
 1. **Live trading**: `AlpacaBrokerAdapter.__init__` raises `LiveTradingDisabledError` unless both `ALPACA_ENV=live` and `ALPACA_LIVE_TRADING_CONFIRMED=true` are set — and even then, `submit_order` raises `LiveTradingDisabledError` unconditionally, because no live order path is implemented yet.
-2. **Execution mode**: `EXECUTION_MODE` defaults to `DRY_RUN`; the pipeline only calls `submit_order` when it's explicitly `PAPER_EXECUTION`.
+2. **Execution mode**: `EXECUTION_MODE` defaults to `DRY_RUN`. Adapter selection (`integrations/broker_factory.py`) and order-submission gating (`core/orchestration/pipeline.py::_maybe_submit`) both key off this single setting — `DRY_RUN`/`PAPER_SIMULATION` never touch Alpaca, `PAPER_MANUAL_APPROVAL` builds and risk-checks real trades but stops before submission, `PAPER_AUTONOMOUS` submits approved trades, and `LIVE` is hard-blocked unconditionally.
 3. **Duplicate orders**: every risk check includes a `client_order_id` uniqueness check against recently-seen IDs.
 4. **Circuit breaker**: independent of any single trade — trips on drawdown breach, daily loss breach, repeated risk rejections, or an externally-flagged abnormal-market condition.

@@ -21,9 +21,36 @@ class AlpacaEnv(str, Enum):
 
 
 class ExecutionMode(str, Enum):
-    DRY_RUN = "DRY_RUN"          # Nothing touches Alpaca. Full pipeline runs, logs, journals.
-    SIMULATION = "SIMULATION"     # Orders are priced/validated against live quotes but never submitted.
-    PAPER_EXECUTION = "PAPER_EXECUTION"  # Orders are actually submitted to the Alpaca paper account.
+    """
+    The mode ladder is the single source of truth for which BrokerAdapter
+    gets used (see integrations/broker_factory.py::get_broker_adapter).
+    Nothing else in the codebase should decide real-vs-mock adapter
+    selection — that was the Day-1 bug (apps/api/main.py picked the real
+    adapter based on "are credentials present" instead of this mode).
+    """
+    DRY_RUN = "DRY_RUN"
+    # Nothing touches Alpaca. MockBrokerAdapter only. Full pipeline runs,
+    # logs, journals. This is the default and the safe fallback.
+
+    PAPER_SIMULATION = "PAPER_SIMULATION"
+    # Still MockBrokerAdapter (or a future dedicated simulation adapter) —
+    # no live network calls. Distinguished from DRY_RUN only by intent/UI
+    # labeling: "we are simulating as if paper-trading."
+
+    PAPER_MANUAL_APPROVAL = "PAPER_MANUAL_APPROVAL"
+    # Real AlpacaBrokerAdapter (paper endpoint). Pipeline builds and risk-
+    # checks real trades against real market data, but STOPS before
+    # submit_order and waits for explicit operator approval.
+
+    PAPER_AUTONOMOUS = "PAPER_AUTONOMOUS"
+    # Real AlpacaBrokerAdapter (paper endpoint). Approved trades are
+    # submitted automatically. Requires explicit operator opt-in — never
+    # the default.
+
+    LIVE = "LIVE"
+    # Hard-blocked in this build, unconditionally, regardless of any other
+    # flag. See integrations/broker_factory.py and
+    # integrations/alpaca/adapter.py::LiveTradingDisabledError.
 
 
 class DeployStage(str, Enum):

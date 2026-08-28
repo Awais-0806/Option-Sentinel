@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from core.config.settings import Settings
 from core.interfaces.broker import AccountSnapshot, BrokerPosition, OrderResult
 from core.models.market import PriceBar
-from core.models.options import OptionChainSlice, OptionContract, OptionRight
+from core.models.options import OptionChainSlice, OptionRight
 
 logger = logging.getLogger("optionsentinel.integrations.alpaca")
 

@@ -75,7 +75,8 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(32))
     quantity: Mapped[int] = mapped_column(Integer)
     filled_quantity: Mapped[int] = mapped_column(Integer, default=0)
-    execution_mode: Mapped[str] = mapped_column(String(32))  # DRY_RUN | SIMULATION | PAPER_EXECUTION
+    execution_mode: Mapped[str] = mapped_column(String(32))
+    # DRY_RUN | PAPER_SIMULATION | PAPER_MANUAL_APPROVAL | PAPER_AUTONOMOUS | LIVE (blocked)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
 
     opportunity: Mapped["Opportunity"] = relationship(back_populates="orders")

@@ -2,13 +2,13 @@
 Usage:  python -m scripts.health_check
 
 Reports Alpaca connectivity, environment, account, market-data, and
-options-data status, plus Alpaca CLI presence. Never raises on its own —
-a health check that crashes isn't a health check.
+options-data status, plus Alpaca CLI presence. Never raises past main()
+without printing a clear message first — a health check that crashes
+opaquely isn't a health check.
 
-If no ALPACA_API_KEY/ALPACA_SECRET_KEY are configured, falls back to the
-mock adapter automatically so `python -m scripts.health_check` is
-runnable immediately after cloning the repo, before any credentials
-exist.
+Adapter selection goes through integrations/broker_factory.py, the same
+single source of truth apps/api/main.py uses — keyed on EXECUTION_MODE,
+not on whether credential strings happen to be non-empty.
 """
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ import sys
 from core.config.settings import get_settings
 from core.events.logging_config import configure_logging
 from integrations.alpaca_cli.cli import cli_health_check
+from integrations.broker_factory import BrokerConfigurationError, get_broker_adapter
+
+MOCK_MODES = ("DRY_RUN", "PAPER_SIMULATION")
 
 
 def main() -> int:
@@ -28,24 +31,18 @@ def main() -> int:
     print(f"EXECUTION_MODE:   {settings.execution_mode.value}")
     print(f"ALPACA_ENV:       {settings.alpaca_env.value}")
 
-    have_creds = bool(settings.alpaca_api_key and settings.alpaca_secret_key)
+    try:
+        adapter = get_broker_adapter(settings)
+    except BrokerConfigurationError as exc:
+        print(f"\nOVERALL: FAIL (configuration)\nREASON: {exc}")
+        return 1
+    except Exception as exc:  # noqa: BLE001 - a broken adapter init must still print, not crash
+        print(f"\nOVERALL: FAIL (adapter init)\nREASON: {exc}")
+        return 1
 
-    if have_creds:
-        try:
-            from integrations.alpaca.adapter import AlpacaBrokerAdapter
-            adapter = AlpacaBrokerAdapter(settings)
-            source = "REAL (alpaca-py)"
-        except Exception as exc:  # noqa: BLE001
-            print(f"WARNING: could not initialize real Alpaca adapter ({exc}); falling back to mock.")
-            from integrations.alpaca.mock_adapter import MockBrokerAdapter
-            adapter = MockBrokerAdapter(settings)
-            source = "MOCK (fallback — real adapter failed to init)"
-    else:
-        from integrations.alpaca.mock_adapter import MockBrokerAdapter
-        adapter = MockBrokerAdapter(settings)
-        source = "MOCK (no ALPACA_API_KEY/ALPACA_SECRET_KEY configured)"
-
-    print(f"ADAPTER SOURCE:   {source}\n")
+    is_mock = settings.execution_mode.value in MOCK_MODES
+    source = "MOCK (DRY_RUN / PAPER_SIMULATION — no network calls made)" if is_mock else "REAL (alpaca-py, paper endpoint)"
+    print(f"DATA SOURCE:      {source}\n")
 
     status = adapter.health_check()
     for key in ("ALPACA_CONNECTION", "ENVIRONMENT", "ACCOUNT", "MARKET_DATA", "OPTIONS_DATA"):

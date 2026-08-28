@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 from core.config.settings import Settings
 from core.models.market import MarketRegime
 from core.models.options import OptionChainSlice, OptionContract
-from core.models.trade import TradeCandidate, TradeLeg, TradeScoreBreakdown, TradeStrategy
+from core.models.trade import TradeCandidate, TradeStrategy
 
 
 @dataclass(frozen=True, slots=True)

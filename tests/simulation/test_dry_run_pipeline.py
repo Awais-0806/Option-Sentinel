@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.config.settings import ExecutionMode
+from core.config.settings import ExecutionMode, Settings
 from core.orchestration.pipeline import run_pipeline
 from integrations.alpaca.mock_adapter import MockBrokerAdapter
 
@@ -45,3 +45,31 @@ def test_pipeline_is_deterministic_across_runs(settings):
     strategies1 = [e.strategy for e in result1.journal_entries]
     strategies2 = [e.strategy for e in result2.journal_entries]
     assert strategies1 == strategies2
+
+
+def test_paper_manual_approval_builds_and_risk_checks_but_never_auto_submits(monkeypatch):
+    """PHASE A/E: manual approval must stop before submission every time,
+    even for an APPROVE verdict, until an approval flow explicitly exists."""
+    settings = Settings()
+    settings.execution_mode = ExecutionMode.PAPER_MANUAL_APPROVAL
+    broker = MockBrokerAdapter(settings)
+    called = {"count": 0}
+    original = broker.submit_order
+    monkeypatch.setattr(broker, "submit_order", lambda *a, **k: (called.__setitem__("count", called["count"] + 1), original(*a, **k))[1])
+
+    result = run_pipeline(settings, broker, symbols=["SPY", "QQQ"])
+    assert called["count"] == 0
+    statuses = {e.execution_status for e in result.journal_entries}
+    assert statuses <= {"AWAITING_MANUAL_APPROVAL"}
+
+
+def test_paper_autonomous_submits_approved_trades(monkeypatch):
+    settings = Settings()
+    settings.execution_mode = ExecutionMode.PAPER_AUTONOMOUS
+    broker = MockBrokerAdapter(settings)
+    called = {"count": 0}
+    original = broker.submit_order
+    monkeypatch.setattr(broker, "submit_order", lambda *a, **k: (called.__setitem__("count", called["count"] + 1), original(*a, **k))[1])
+
+    run_pipeline(settings, broker, symbols=["SPY", "QQQ"])
+    assert called["count"] > 0

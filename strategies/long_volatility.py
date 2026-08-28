@@ -49,11 +49,15 @@ class LongVolatilityStrategy(Strategy):
             return None
 
         max_loss_per_contract = debit * 100
-        max_risk_budget = ctx.settings.max_trade_risk_pct * 100_000  # placeholder equity scale;
+
         # NOTE: the Risk Sentinel re-checks this against *real* portfolio equity —
-        # this local check exists so the strategy itself never proposes an
+        # this local check exists so the strategy itself never even proposes an
         # obviously oversized long-vol trade, per the "strict maximum-risk
-        # control" requirement in the spec.
+        # control" requirement in the spec. 100_000 is a placeholder equity
+        # scale used only to keep the strategy self-limiting in isolation.
+        max_risk_budget = ctx.settings.max_trade_risk_pct * 100_000
+        if max_loss_per_contract > max_risk_budget:
+            return None
 
         legs = (
             TradeLeg(contract=atm_call, side="BUY", quantity=1),
@@ -82,7 +86,7 @@ class LongVolatilityStrategy(Strategy):
                 f"Regime HIGH_VOLATILITY (confidence {ctx.regime.confidence:.0%}). "
                 f"ATM straddle at {atm_call.strike}, {(expiration - today).days} DTE. "
                 f"Debit ${debit:.2f} (${max_loss_per_contract:.2f} max loss per contract) — "
-                f"sized to respect strict long-vol risk control, not scaled up on conviction alone."
+                "sized to respect strict long-vol risk control, not scaled up on conviction alone."
             ),
             max_profit=float("inf"),  # theoretically uncapped; Risk Sentinel and journal must render this clearly
             max_loss=round(max_loss_per_contract, 2),
