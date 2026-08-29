@@ -119,6 +119,7 @@ class MockBrokerAdapter:
                             implied_volatility=round(realized_vol * rng.uniform(0.9, 1.15), 4),
                             delta=round(delta, 3),
                             gamma=None, theta=None, vega=None,
+                            quote_timestamp=datetime.now(timezone.utc),
                         )
                     )
 

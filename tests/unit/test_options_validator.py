@@ -79,6 +79,26 @@ def test_stale_quote_is_rejected(settings):
     assert any("stale quote" in r for r in reasons)
 
 
+def test_stale_quote_detected_from_contracts_own_timestamp(settings):
+    """Real Alpaca contracts carry their own quote_timestamp; the validator
+    must use it directly without the caller needing to pass quote_age_seconds."""
+    from datetime import datetime, timedelta, timezone
+
+    old_timestamp = datetime.now(timezone.utc) - timedelta(hours=2)
+    ok, reasons = OptionContractValidator(settings).validate(_contract(quote_timestamp=old_timestamp))
+    assert not ok
+    assert any("stale quote" in r for r in reasons)
+
+
+def test_fresh_contract_timestamp_is_not_flagged_stale(settings):
+    from datetime import datetime, timezone
+
+    fresh = datetime.now(timezone.utc)
+    ok, reasons = OptionContractValidator(settings).validate(_contract(quote_timestamp=fresh))
+    assert ok
+    assert reasons == []
+
+
 def test_contract_can_have_multiple_simultaneous_rejection_reasons(settings):
     ok, reasons = OptionContractValidator(settings).validate(
         _contract(volume=0, open_interest=0, bid=0.0, ask=0.0)

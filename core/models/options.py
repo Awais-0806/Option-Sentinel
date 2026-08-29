@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 
 
@@ -27,6 +27,11 @@ class OptionContract:
     gamma: float | None = None
     theta: float | None = None
     vega: float | None = None
+    quote_timestamp: datetime | None = None
+    # ^ when the underlying quote was captured. Populated by the real Alpaca
+    # adapter from the snapshot's quote timestamp; the mock adapter sets it
+    # to "now" since synthetic data has no real staleness. None (unknown)
+    # is treated as "cannot verify freshness" by the validator, not as fresh.
 
     @property
     def mid(self) -> float:

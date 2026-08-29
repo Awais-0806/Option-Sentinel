@@ -74,9 +74,17 @@ class OptionContractValidator:
                 )
 
         # ── Stale quote ───────────────────────────────────────────────
-        if quote_age_seconds is not None and quote_age_seconds > self.settings.stale_quote_seconds:
+        # Prefer the contract's own quote_timestamp (real Alpaca data) over
+        # a caller-supplied blanket age; falls back to the caller-supplied
+        # value for callers/tests that don't carry a per-contract timestamp.
+        effective_age_seconds = quote_age_seconds
+        if contract.quote_timestamp is not None:
+            effective_age_seconds = (
+                datetime.now(timezone.utc) - contract.quote_timestamp
+            ).total_seconds()
+        if effective_age_seconds is not None and effective_age_seconds > self.settings.stale_quote_seconds:
             reasons.append(
-                f"stale quote: {quote_age_seconds:.0f}s old > {self.settings.stale_quote_seconds}s limit"
+                f"stale quote: {effective_age_seconds:.0f}s old > {self.settings.stale_quote_seconds}s limit"
             )
 
         return len(reasons) == 0, reasons
