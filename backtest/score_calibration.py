@@ -25,12 +25,22 @@ def score_calibration_report(trades: list[TradeExecution]) -> dict:
     for label in BUCKET_LABELS:
         bucket_trades = buckets[label]
         if not bucket_trades:
-            report[label] = {"trade_count": 0, "note": "no trades in this score range in this dataset"}
+            report[label] = {"trade_count": 0, "status": "INSUFFICIENT_DATA", "note": "no trades in this score range in this dataset"}
+            continue
+        if len(bucket_trades) < 5:
+            wins = [t for t in bucket_trades if t.net_pnl > 0]
+            pnls = [t.net_pnl for t in bucket_trades]
+            report[label] = {
+                "trade_count": len(bucket_trades), "status": "INSUFFICIENT_DATA",
+                "win_rate": round(len(wins) / len(bucket_trades), 4), "avg_pnl": round(sum(pnls) / len(pnls), 2),
+                "note": "fewer than 5 trades — numbers shown for transparency only, not a basis for any conclusion",
+            }
             continue
         wins = [t for t in bucket_trades if t.net_pnl > 0]
         pnls = [t.net_pnl for t in bucket_trades]
         report[label] = {
             "trade_count": len(bucket_trades),
+            "status": "REPORTED",
             "win_rate": round(len(wins) / len(bucket_trades), 4),
             "avg_pnl": round(sum(pnls) / len(pnls), 2),
             "total_pnl": round(sum(pnls), 2),

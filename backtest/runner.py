@@ -22,7 +22,8 @@ from datetime import date, datetime
 
 from backtest.data_capability import Evaluability, gate_dataset_for_backtest
 from backtest.data_schema import HistoricalDataset
-from backtest.pnl import COST_BASE, CostAssumptions, TradeExecution, entry_to_expiration_pnl
+from backtest.exit_engine import ExitConfig, ExitRuleType, check_early_exit
+from backtest.pnl import COST_BASE, CostAssumptions, TradeExecution, close_position_early, entry_to_expiration_pnl
 from backtest.replay_engine import decide_at
 from core.config.settings import Settings
 from core.models.risk import RiskVerdict
@@ -38,6 +39,11 @@ class BacktestConfig:
     cost: CostAssumptions = COST_BASE
     starting_equity: float = 100_000.0
     warmup_days: int = 55  # must exceed RegimeClassifier's slow trend window
+    exit_config: ExitConfig = None  # None -> defaults to hold-to-expiration
+
+    def __post_init__(self):
+        if self.exit_config is None:
+            object.__setattr__(self, "exit_config", ExitConfig())
 
 
 @dataclass
@@ -54,6 +60,7 @@ class BacktestResult:
     risk_reduced: int = 0
     risk_approved: int = 0
     equity_curve: list[tuple[date, float]] = field(default_factory=list)
+    early_exits: int = 0
 
     def stats(self) -> dict:
         if not self.trades:
@@ -92,6 +99,13 @@ class BacktestResult:
             "risk_rejected": self.risk_rejected,
             "risk_reduced": self.risk_reduced,
             "risk_approved": self.risk_approved,
+            "no_trade_rate": round(self.no_trade_outcomes / self.signals, 4) if self.signals else None,
+            "rejection_rate": round(self.risk_rejected / self.signals, 4) if self.signals else None,
+            "early_exits": self.early_exits,
+            "sample_size_warning": (
+                f"only {n} completed trades — below the 10-trade floor for treating this as "
+                "evidence of a robust edge in either direction" if n < 10 else None
+            ),
         }
 
 
@@ -116,6 +130,33 @@ def run_backtest(dataset: HistoricalDataset, settings: Settings, config: Backtes
 
         still_open = []
         for pos in open_positions:
+            should_exit_early, exit_reason = False, None
+            if config.exit_config.rule != ExitRuleType.EXPIRATION and pos["expiration"] > as_of:
+                should_exit_early, exit_reason = check_early_exit(
+                    pos["candidate"], dataset, as_of, pos["entry_date"], config.exit_config
+                )
+
+            if should_exit_early:
+                from backtest.exit_engine import reprice_position
+                mtm_pnl_per_contract = reprice_position(pos["candidate"], dataset, as_of)
+                # mtm_pnl_per_contract is P&L vs entry; reconstruct the exit NET VALUE
+                # (entry_net + pnl/100) so close_position_early's accounting matches
+                # entry_to_expiration_pnl's convention exactly.
+                from backtest.pnl import _leg_entry_price
+                entry_net = sum(
+                    (_leg_entry_price(leg, config.cost) if leg.side == "BUY" else -_leg_entry_price(leg, config.cost))
+                    for leg in pos["candidate"].legs
+                )
+                exit_net_value = entry_net + (mtm_pnl_per_contract / 100.0)
+                execution = close_position_early(
+                    pos["candidate"], pos["entry_date"], as_of, exit_net_value, quantity=pos["qty"], cost=config.cost
+                )
+                equity += execution.net_pnl
+                peak_equity = max(peak_equity, equity)
+                result.trades.append(execution)
+                result.early_exits += 1
+                continue
+
             if pos["expiration"] <= as_of:
                 exit_underlying = closes_by_date.get(pos["expiration"], closes_by_date[as_of])
                 execution = entry_to_expiration_pnl(

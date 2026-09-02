@@ -96,26 +96,48 @@ def entry_to_expiration_pnl(
     """Computes P&L leg-by-leg: net entry cost (sum of realistic fills,
     signed by side) vs. net exit value (sum of intrinsic payoffs, signed by
     side), times the contract multiplier and quantity, minus costs."""
-    entry_net = sum(
-        (_leg_entry_price(leg, cost) if leg.side == "BUY" else -_leg_entry_price(leg, cost))
-        for leg in candidate.legs
-    )
     exit_net = sum(
         (_leg_intrinsic_at(leg, underlying_price_at_expiration) if leg.side == "BUY"
          else -_leg_intrinsic_at(leg, underlying_price_at_expiration))
         for leg in candidate.legs
     )
+    expiration = candidate.legs[0].contract.expiration if candidate.legs else entry_date
+    return _close_position(candidate, entry_date, expiration, exit_net, quantity=quantity, cost=cost)
 
+
+def close_position_early(
+    candidate: TradeCandidate,
+    entry_date: date,
+    exit_date: date,
+    exit_net_value_per_share: float,
+    *,
+    quantity: int = 1,
+    cost: CostAssumptions = COST_BASE,
+) -> TradeExecution:
+    """Same accounting as entry_to_expiration_pnl, but for an early exit
+    where `exit_net_value_per_share` comes from a repriced mark-to-market
+    (see backtest/exit_engine.py) rather than intrinsic value at
+    expiration. Caller is responsible for only supplying this when the
+    dataset actually supports leakage-safe repricing."""
+    return _close_position(candidate, entry_date, exit_date, exit_net_value_per_share, quantity=quantity, cost=cost)
+
+
+def _close_position(
+    candidate: TradeCandidate, entry_date: date, exit_date: date, exit_net: float,
+    *, quantity: int, cost: CostAssumptions,
+) -> TradeExecution:
+    entry_net = sum(
+        (_leg_entry_price(leg, cost) if leg.side == "BUY" else -_leg_entry_price(leg, cost))
+        for leg in candidate.legs
+    )
     gross_pnl = (exit_net - entry_net) * CONTRACT_MULTIPLIER * quantity
     fees = cost.commission_per_contract * len(candidate.legs) * quantity * 2  # open + close
     net_pnl = gross_pnl - fees
 
-    expiration = candidate.legs[0].contract.expiration if candidate.legs else entry_date
-
     return TradeExecution(
         trade_id=candidate.trade_id, symbol=candidate.symbol, strategy=candidate.strategy.value,
         entry_date=entry_date, entry_price=round(entry_net, 4),
-        exit_date=expiration, exit_price=round(exit_net, 4),
+        exit_date=exit_date, exit_price=round(exit_net, 4),
         quantity=quantity, fees=round(fees, 2), slippage=0.0,
         gross_pnl=round(gross_pnl, 2), net_pnl=round(net_pnl, 2),
         max_loss_defined=candidate.max_loss, mfe=None, mae=None,
