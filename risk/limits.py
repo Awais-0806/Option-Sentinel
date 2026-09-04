@@ -12,9 +12,10 @@ TradeRiskRequest and produces one RiskDecision.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Callable, Protocol
+from datetime import UTC, datetime
+from typing import Protocol
 
 from core.config.settings import Settings
 from core.models.options import OptionContract
@@ -64,7 +65,7 @@ class TradeRiskRequest:
     portfolio: PortfolioState
     proposed_quantity: int
     client_order_id: str
-    now: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class RiskRule(Protocol):

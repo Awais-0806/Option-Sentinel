@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from core.models.market import RegimeLabel
 from core.models.trade import TradeCandidate, TradeLeg, TradeScoreBreakdown, TradeStrategy
-from strategies.base import Strategy, StrategyContext, closest_strike, nearest_expiration, new_trade_id
+from strategies.base import (
+    Strategy,
+    StrategyContext,
+    closest_strike,
+    nearest_expiration,
+    new_trade_id,
+)
 
 MIN_DTE = 14
 MAX_DTE = 35

@@ -17,8 +17,8 @@ account by Claude (no network/credentials in this sandbox).
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 
 from core.config.settings import Settings
 from core.models.risk import RiskVerdict
@@ -51,7 +51,7 @@ def build_shadow_proposal(candidate: TradeCandidate, risk_verdict: RiskVerdict, 
         (leg.contract.ask if leg.side == "BUY" else -leg.contract.bid) for leg in candidate.legs
     )
     return ShadowProposal(
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         underlying=candidate.symbol,
         strategy=candidate.strategy.value,
         legs=tuple(f"{leg.side} {leg.contract.right.value} {leg.contract.strike} exp {leg.contract.expiration}" for leg in candidate.legs),
@@ -83,7 +83,7 @@ def run_shadow_scan(settings: Settings, symbols: list[str] | None = None) -> lis
         if entry.risk_decision in ("APPROVE", "REDUCE_SIZE"):
             proposals.append(
                 ShadowProposal(
-                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    timestamp=datetime.now(UTC).isoformat(),
                     underlying=entry.symbol, strategy=entry.strategy.value, score=entry.score,
                     risk_verdict=entry.risk_decision, risk_reasons=tuple(entry.risk_reasons),
                     proposed_entry_debit_or_credit=entry.entry_debit_or_credit,

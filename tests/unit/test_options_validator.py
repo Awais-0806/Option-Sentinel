@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, timedelta
 
-from core.models.options import OptionChainSlice, OptionContract, OptionRight
 from agents.options_analyst.validator import OptionContractValidator
+from core.models.options import OptionChainSlice, OptionContract, OptionRight
 
 
 def _contract(**overrides) -> OptionContract:
-    defaults = dict(
-        symbol="TEST250101C00100000", underlying="TEST", expiration=date.today() + timedelta(days=30),
-        strike=100.0, right=OptionRight.CALL, bid=1.0, ask=1.1, last=1.05, volume=100, open_interest=500,
-    )
+    defaults = {
+        "symbol": "TEST250101C00100000", "underlying": "TEST", "expiration": date.today() + timedelta(days=30),  # noqa: DTZ011
+        "strike": 100.0, "right": OptionRight.CALL, "bid": 1.0, "ask": 1.1, "last": 1.05, "volume": 100, "open_interest": 500,
+    }
     defaults.update(overrides)
     return OptionContract(**defaults)
 
@@ -29,7 +29,7 @@ def test_impossible_strike_is_rejected(settings):
 
 def test_expired_contract_is_rejected(settings):
     ok, reasons = OptionContractValidator(settings).validate(
-        _contract(expiration=date.today() - timedelta(days=1))
+        _contract(expiration=date.today() - timedelta(days=1))  # noqa: DTZ011
     )
     assert not ok
     assert any("expired" in r for r in reasons)
@@ -82,18 +82,18 @@ def test_stale_quote_is_rejected(settings):
 def test_stale_quote_detected_from_contracts_own_timestamp(settings):
     """Real Alpaca contracts carry their own quote_timestamp; the validator
     must use it directly without the caller needing to pass quote_age_seconds."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
-    old_timestamp = datetime.now(timezone.utc) - timedelta(hours=2)
+    old_timestamp = datetime.now(UTC) - timedelta(hours=2)
     ok, reasons = OptionContractValidator(settings).validate(_contract(quote_timestamp=old_timestamp))
     assert not ok
     assert any("stale quote" in r for r in reasons)
 
 
 def test_fresh_contract_timestamp_is_not_flagged_stale(settings):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    fresh = datetime.now(timezone.utc)
+    fresh = datetime.now(UTC)
     ok, reasons = OptionContractValidator(settings).validate(_contract(quote_timestamp=fresh))
     assert ok
     assert reasons == []

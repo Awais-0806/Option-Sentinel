@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
-import pytest
 
 from agents.regime.classifier import RegimeClassifier
 from core.models.market import PriceBar, RegimeLabel
 
 
 def _bars_from_closes(closes: list[float]) -> list[PriceBar]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     bars = []
     for i, c in enumerate(closes):
         bars.append(

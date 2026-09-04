@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+import typing
+from datetime import UTC, datetime
 
 # Canonical event names — the dashboard timeline renders these directly.
 EVENT_MARKET_SCAN_STARTED = "MARKET_SCAN_STARTED"
@@ -31,11 +32,11 @@ EVENT_EMERGENCY_HALT = "EMERGENCY_HALT"
 
 
 class JsonFormatter(logging.Formatter):
-    SECRET_KEYS = {"api_key", "secret_key", "alpaca_api_key", "alpaca_secret_key"}
+    SECRET_KEYS: typing.ClassVar[set[str]] = {"api_key", "secret_key", "alpaca_api_key", "alpaca_secret_key"}
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

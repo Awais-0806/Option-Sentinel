@@ -30,8 +30,9 @@ DEFAULT_STRATEGIES: tuple[Strategy, ...] = (
 
 
 def _apply_size_tier(candidate: TradeCandidate, settings: Settings) -> TradeCandidate:
-    from agents.strategy.scoring import size_tier_for_score
     from dataclasses import replace
+
+    from agents.strategy.scoring import size_tier_for_score
 
     tier = size_tier_for_score(candidate.score.total, settings)
     return replace(candidate, size_tier=tier)

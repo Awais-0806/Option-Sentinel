@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from core.models.options import OptionContract, OptionRight
 from core.models.trade import SizeTier, TradeCandidate, TradeLeg, TradeScoreBreakdown, TradeStrategy
@@ -48,5 +48,5 @@ def make_bull_call_candidate(max_loss: float = 500.0, max_profit: float = 1000.0
         probability_estimate=None,
         score=TradeScoreBreakdown(20, 15, 10, 10, 8, 8, 4),
         size_tier=SizeTier.NORMAL_SIZE,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )

@@ -23,7 +23,13 @@ from datetime import date, datetime
 from backtest.data_capability import Evaluability, gate_dataset_for_backtest
 from backtest.data_schema import HistoricalDataset
 from backtest.exit_engine import ExitConfig, ExitRuleType, check_early_exit
-from backtest.pnl import COST_BASE, CostAssumptions, TradeExecution, close_position_early, entry_to_expiration_pnl
+from backtest.pnl import (
+    COST_BASE,
+    CostAssumptions,
+    TradeExecution,
+    close_position_early,
+    entry_to_expiration_pnl,
+)
 from backtest.replay_engine import decide_at
 from core.config.settings import Settings
 from core.models.risk import RiskVerdict
@@ -130,9 +136,9 @@ def run_backtest(dataset: HistoricalDataset, settings: Settings, config: Backtes
 
         still_open = []
         for pos in open_positions:
-            should_exit_early, exit_reason = False, None
+            should_exit_early, _exit_reason = False, None
             if config.exit_config.rule != ExitRuleType.EXPIRATION and pos["expiration"] > as_of:
-                should_exit_early, exit_reason = check_early_exit(
+                should_exit_early, _exit_reason = check_early_exit(
                     pos["candidate"], dataset, as_of, pos["entry_date"], config.exit_config
                 )
 

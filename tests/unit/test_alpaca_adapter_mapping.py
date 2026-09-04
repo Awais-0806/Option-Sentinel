@@ -12,7 +12,7 @@ objects, including for missing/partial/malformed data.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 from core.models.options import OptionRight
@@ -20,29 +20,29 @@ from integrations.alpaca.adapter import AlpacaBrokerAdapter
 
 
 def _fake_contract_meta(**overrides) -> SimpleNamespace:
-    defaults = dict(
-        symbol="AAPL240119C00100000",
-        underlying_symbol="AAPL",
-        expiration_date=date(2024, 1, 19),
-        strike_price="100",
-        type="call",
-        open_interest="6168",
-    )
+    defaults = {
+        "symbol": "AAPL240119C00100000",
+        "underlying_symbol": "AAPL",
+        "expiration_date": date(2024, 1, 19),
+        "strike_price": "100",
+        "type": "call",
+        "open_interest": "6168",
+    }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
 
 
 def _fake_snapshot(**overrides) -> SimpleNamespace:
-    quote = SimpleNamespace(bid_price=1.20, ask_price=1.30, timestamp=datetime.now(timezone.utc))
+    quote = SimpleNamespace(bid_price=1.20, ask_price=1.30, timestamp=datetime.now(UTC))
     trade = SimpleNamespace(price=1.25, size=3)
     greeks = SimpleNamespace(delta=0.55, gamma=0.02, theta=-0.03, vega=0.10)
-    defaults = dict(
-        symbol="AAPL240119C00100000",
-        latest_quote=quote,
-        latest_trade=trade,
-        implied_volatility=0.28,
-        greeks=greeks,
-    )
+    defaults = {
+        "symbol": "AAPL240119C00100000",
+        "latest_quote": quote,
+        "latest_trade": trade,
+        "implied_volatility": 0.28,
+        "greeks": greeks,
+    }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
 
@@ -210,7 +210,7 @@ def test_get_option_chain_merges_metadata_and_snapshot_dict():
 
 # ── 10. timestamp handling ──────────────────────────────────────────────
 def test_normalized_contract_quote_timestamp_is_preserved():
-    ts = datetime(2026, 1, 15, 14, 30, tzinfo=timezone.utc)
+    ts = datetime(2026, 1, 15, 14, 30, tzinfo=UTC)
     meta = _fake_contract_meta()
     snap = _fake_snapshot(latest_quote=SimpleNamespace(bid_price=1.0, ask_price=1.1, timestamp=ts))
     contract = AlpacaBrokerAdapter._normalize_contract("AAPL", meta, snap)
@@ -232,7 +232,7 @@ def test_submit_order_builds_mleg_request_with_correct_legs(monkeypatch):
             captured["request"] = request
             return SimpleNamespace(
                 id="order-123", client_order_id="cid-abc", status="accepted",
-                filled_qty="0", submitted_at=datetime.now(timezone.utc),
+                filled_qty="0", submitted_at=datetime.now(UTC),
             )
 
     adapter._trading = FakeTrading()
@@ -264,6 +264,7 @@ def test_submit_order_refuses_live_endpoint_even_with_valid_request():
     adapter = _adapter_instance()
     adapter.settings = SimpleNamespace(alpaca_env=SimpleNamespace(value="live"))
     import pytest as _pytest  # local import: only needed for this one raises-check
+
     from integrations.alpaca.adapter import LiveTradingDisabledError
 
     with _pytest.raises(LiveTradingDisabledError):
@@ -308,7 +309,7 @@ def test_submit_order_builds_single_leg_market_order():
             captured["request"] = request
             return SimpleNamespace(
                 id="order-456", client_order_id="cid-single", status="accepted",
-                filled_qty="0", submitted_at=datetime.now(timezone.utc),
+                filled_qty="0", submitted_at=datetime.now(UTC),
             )
 
     adapter._trading = FakeTrading()

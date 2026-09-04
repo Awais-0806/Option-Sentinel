@@ -15,8 +15,6 @@ from datetime import date
 
 from backtest.data_schema import HistoricalDataset
 from backtest.replay_engine import decide_at
-from core.config.settings import Settings
-from core.models.options import OptionRight
 from data.market.synthetic_source import generate_synthetic_dataset
 from risk.limits import PortfolioState
 

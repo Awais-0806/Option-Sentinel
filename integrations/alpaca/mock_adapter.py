@@ -10,7 +10,7 @@ which one it's talking to.
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
@@ -56,7 +56,7 @@ class MockBrokerAdapter:
         closes = base_price * np.exp(np.cumsum(log_returns))
 
         bars: list[PriceBar] = []
-        today = datetime.now(timezone.utc)
+        today = datetime.now(UTC)
         for i, close in enumerate(closes):
             ts = today - timedelta(days=(n - i))
             intraday_range = close * rng.uniform(0.003, 0.015)
@@ -79,7 +79,7 @@ class MockBrokerAdapter:
         realized_vol = float(np.std(np.diff(np.log([b.close for b in bars])))) * np.sqrt(252)
         realized_vol = max(realized_vol, 0.10)
 
-        today = date.today()
+        today = datetime.now(UTC).date()
         expirations = [today + timedelta(days=d) for d in (min_dte + 3, (min_dte + max_dte) // 2, max_dte - 3)]
 
         contracts: list[OptionContract] = []
@@ -119,13 +119,13 @@ class MockBrokerAdapter:
                             implied_volatility=round(realized_vol * rng.uniform(0.9, 1.15), 4),
                             delta=round(delta, 3),
                             gamma=None, theta=None, vega=None,
-                            quote_timestamp=datetime.now(timezone.utc),
+                            quote_timestamp=datetime.now(UTC),
                         )
                     )
 
         return OptionChainSlice(
             underlying=symbol,
-            fetched_at=datetime.now(timezone.utc).isoformat(),
+            fetched_at=datetime.now(UTC).isoformat(),
             contracts=tuple(contracts),
         )
 
@@ -139,7 +139,7 @@ class MockBrokerAdapter:
             client_order_id=client_order_id,
             status="filled",
             filled_qty=quantity,
-            submitted_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
             raw={"mode": "MOCK", "legs": len(legs)},
         )
 

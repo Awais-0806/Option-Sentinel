@@ -41,7 +41,7 @@ class CsvSchemaError(ValueError):
 
 
 def _parse_date(value: str) -> date_cls:
-    return datetime.strptime(value.strip(), "%Y-%m-%d").date()
+    return datetime.strptime(value.strip(), "%Y-%m-%d").date()  # noqa: DTZ007
 
 
 def _opt_float(row: dict, key: str) -> float | None:

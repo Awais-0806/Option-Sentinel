@@ -11,12 +11,12 @@ reviewed.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from core.config.settings import Settings
 from core.interfaces.broker import AccountSnapshot, BrokerPosition, OrderResult
 from core.models.market import PriceBar
-from core.models.options import OptionChainSlice, OptionRight
+from core.models.options import OptionChainSlice, OptionContract, OptionRight
 
 logger = logging.getLogger("optionsentinel.integrations.alpaca")
 
@@ -41,9 +41,9 @@ class AlpacaBrokerAdapter:
             )
 
         try:
-            from alpaca.trading.client import TradingClient
-            from alpaca.data.historical.stock import StockHistoricalDataClient
             from alpaca.data.historical.option import OptionHistoricalDataClient
+            from alpaca.data.historical.stock import StockHistoricalDataClient
+            from alpaca.trading.client import TradingClient
         except ImportError as exc:  # pragma: no cover - exercised only without the dep installed
             raise ImportError(
                 "alpaca-py is not installed. Run `pip install -e .` "
@@ -97,7 +97,7 @@ class AlpacaBrokerAdapter:
         req = StockBarsRequest(
             symbol_or_symbols=symbol,
             timeframe=TimeFrame.Day,
-            start=datetime.now(timezone.utc) - timedelta(days=lookback_days * 2),  # buffer for weekends/holidays
+            start=datetime.now(UTC) - timedelta(days=lookback_days * 2),  # buffer for weekends/holidays
         )
         bars = self._stock_data.get_stock_bars(req)
         rows = bars[symbol] if symbol in bars.data else []
@@ -119,10 +119,10 @@ class AlpacaBrokerAdapter:
         from alpaca.trading.enums import AssetStatus, ContractType
         from alpaca.trading.requests import GetOptionContractsRequest
 
-        today = date.today()
+        today = datetime.now(UTC).date()
         exp_gte = today + timedelta(days=min_dte)
         exp_lte = today + timedelta(days=max_dte)
-        fetched_at = datetime.now(timezone.utc).isoformat()
+        fetched_at = datetime.now(UTC).isoformat()
 
         try:
             option_contracts = []
@@ -174,7 +174,7 @@ class AlpacaBrokerAdapter:
         return OptionChainSlice(underlying=symbol, fetched_at=fetched_at, contracts=contracts)
 
     @staticmethod
-    def _normalize_contract(underlying: str, meta, snapshot) -> "OptionContract":
+    def _normalize_contract(underlying: str, meta, snapshot) -> OptionContract:
         """Maps one Alpaca contract-metadata object + its (possibly missing)
         snapshot into our normalized OptionContract. Isolated as a
         @staticmethod specifically so it's unit-testable with hand-built
@@ -228,7 +228,7 @@ class AlpacaBrokerAdapter:
         bars = self.get_price_bars(symbol, lookback_days=1)
         if not bars:
             return True
-        age = (datetime.now(timezone.utc) - bars[-1].timestamp).total_seconds()
+        age = (datetime.now(UTC) - bars[-1].timestamp).total_seconds()
         return age > max_age_seconds
 
     # ── Execution ─────────────────────────────────────────────────────
@@ -237,13 +237,16 @@ class AlpacaBrokerAdapter:
         if self.settings.alpaca_env.value != "paper":
             raise LiveTradingDisabledError("Live order submission is not implemented in this build.")
 
-        submitted_at = datetime.now(timezone.utc)
+        submitted_at = datetime.now(UTC)
         order_class = "SINGLE"
         try:
-            from alpaca.trading.enums import OrderClass
+            from alpaca.trading.enums import OrderClass, TimeInForce
             from alpaca.trading.enums import OrderSide as AlpacaOrderSide
-            from alpaca.trading.enums import TimeInForce
-            from alpaca.trading.requests import LimitOrderRequest, MarketOrderRequest, OptionLegRequest
+            from alpaca.trading.requests import (
+                LimitOrderRequest,
+                MarketOrderRequest,
+                OptionLegRequest,
+            )
 
             if not legs:
                 raise ValueError("an option order requires at least one leg")

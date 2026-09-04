@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from core.models.market import MarketRegime, RegimeLabel
 from core.models.options import OptionChainSlice, OptionContract, OptionRight
@@ -12,7 +12,7 @@ from strategies.long_volatility import LongVolatilityStrategy
 
 
 def _synthetic_chain(spot: float, dte_list=(30,)) -> OptionChainSlice:
-    today = date.today()
+    today = date.today()  # noqa: DTZ011
     contracts = []
     for dte in dte_list:
         exp = today + timedelta(days=dte)

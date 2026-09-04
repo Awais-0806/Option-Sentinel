@@ -7,7 +7,7 @@ demoable claim instead of a marketing line — judges can query it.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -18,7 +18,7 @@ class Base(DeclarativeBase):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class MarketScan(Base):
@@ -48,8 +48,8 @@ class Opportunity(Base):
     probability_estimate: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
 
-    risk_checks: Mapped[list["RiskCheck"]] = relationship(back_populates="opportunity")
-    orders: Mapped[list["Order"]] = relationship(back_populates="opportunity")
+    risk_checks: Mapped[list[RiskCheck]] = relationship(back_populates="opportunity")
+    orders: Mapped[list[Order]] = relationship(back_populates="opportunity")
 
 
 class RiskCheck(Base):
@@ -62,7 +62,7 @@ class RiskCheck(Base):
     reasons: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
 
-    opportunity: Mapped["Opportunity"] = relationship(back_populates="risk_checks")
+    opportunity: Mapped[Opportunity] = relationship(back_populates="risk_checks")
 
 
 class Order(Base):
@@ -79,7 +79,7 @@ class Order(Base):
     # DRY_RUN | PAPER_SIMULATION | PAPER_MANUAL_APPROVAL | PAPER_AUTONOMOUS | LIVE (blocked)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
 
-    opportunity: Mapped["Opportunity"] = relationship(back_populates="orders")
+    opportunity: Mapped[Opportunity] = relationship(back_populates="orders")
 
 
 class Position(Base):

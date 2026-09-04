@@ -33,8 +33,8 @@ from strategies.iron_condor import IronCondorStrategy
 def _load_dataset(args):
     from datetime import datetime as _dt
 
-    start = _dt.strptime(args.start, "%Y-%m-%d").date()
-    end = _dt.strptime(args.end, "%Y-%m-%d").date()
+    start = _dt.strptime(args.start, "%Y-%m-%d").date()  # noqa: DTZ007
+    end = _dt.strptime(args.end, "%Y-%m-%d").date()  # noqa: DTZ007
 
     if args.data == "synthetic":
         from data.market.synthetic_source import generate_synthetic_dataset

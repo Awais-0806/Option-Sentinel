@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from core.config.settings import Settings
 from core.models.market import MarketRegime
@@ -22,7 +22,7 @@ class StrategyContext:
 
     def __post_init__(self):
         if self.now is None:
-            object.__setattr__(self, "now", datetime.now(timezone.utc))
+            object.__setattr__(self, "now", datetime.now(UTC))
 
 
 def new_trade_id() -> str:

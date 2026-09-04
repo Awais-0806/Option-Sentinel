@@ -15,7 +15,7 @@ profit.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
@@ -103,7 +103,7 @@ class RegimeClassifier:
                 regime=RegimeLabel.UNCERTAIN,
                 confidence=0.0,
                 features={"reason_insufficient_bars": float(len(bars))},
-                as_of=datetime.now(timezone.utc),
+                as_of=datetime.now(UTC),
             )
 
         df = pd.DataFrame(
@@ -158,7 +158,7 @@ class RegimeClassifier:
             regime=regime,
             confidence=confidence,
             features=features,
-            as_of=datetime.now(timezone.utc),
+            as_of=datetime.now(UTC),
         )
 
     def _decide(

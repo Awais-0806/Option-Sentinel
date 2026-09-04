@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
 
-from core.models.market import PriceBar
 from core.models.options import OptionContract
 
 
@@ -69,7 +68,7 @@ class HistoricalDataset:
         """Short string every report/log line should prefix results with."""
         return f"[{self.provenance.value}: {self.underlying} {self.start_date}..{self.end_date}]"
 
-    def as_of_or_earlier(self, cutoff: date) -> "HistoricalDataset":
+    def as_of_or_earlier(self, cutoff: date) -> HistoricalDataset:
         """Returns a NEW dataset containing only days at or before cutoff.
         This is the core leakage-prevention primitive — see backtest/replay_engine.py."""
         visible = tuple(d for d in self.days if d.as_of_date <= cutoff)

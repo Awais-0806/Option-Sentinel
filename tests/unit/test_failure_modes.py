@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 from core.models.market import MarketRegime, RegimeLabel
 from core.models.options import OptionChainSlice, OptionContract, OptionRight
@@ -56,8 +56,9 @@ def test_expired_contract_fails_contract_sanity(settings):
         symbol="EXP", underlying="TEST", expiration=date(2020, 1, 1), strike=100,
         right=OptionRight.CALL, bid=1.0, ask=1.1, last=1.05, volume=10, open_interest=50,
     )
-    from core.models.trade import TradeLeg
     from dataclasses import replace
+
+    from core.models.trade import TradeLeg
 
     candidate = make_bull_call_candidate()
     candidate = replace(candidate, legs=(TradeLeg(expired, "BUY", 1), candidate.legs[1]))

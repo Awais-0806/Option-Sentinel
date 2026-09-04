@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+from agents.options_analyst.validator import OptionContractValidator
+from agents.regime.classifier import RegimeClassifier
+from agents.strategy.selector import StrategySelector
 from core.config.settings import ExecutionMode, Settings
 from core.events.logging_config import (
     EVENT_MARKET_SCAN_COMPLETED,
@@ -30,9 +33,6 @@ from core.events.logging_config import (
 from core.interfaces.broker import BrokerAdapter
 from core.models.risk import RiskVerdict
 from core.models.trade import SizeTier, TradeJournalEntry
-from agents.regime.classifier import RegimeClassifier
-from agents.options_analyst.validator import OptionContractValidator
-from agents.strategy.selector import StrategySelector
 from risk.limits import PortfolioState, RiskPolicy, TradeRiskRequest
 from risk.veto import RiskSentinel
 from strategies.base import StrategyContext
@@ -77,8 +77,8 @@ def run_pipeline(
         buying_power=account.buying_power,
         daily_pnl=account.daily_pnl,
         peak_equity=account.peak_equity,
-        open_positions=tuple(),
-        recent_client_order_ids=tuple(),
+        open_positions=(),
+        recent_client_order_ids=(),
     )
 
     logger.info(EVENT_MARKET_SCAN_STARTED, extra={"event": EVENT_MARKET_SCAN_STARTED, "context": {"symbols": symbols}})
@@ -103,7 +103,7 @@ def run_pipeline(
             regime=regime,
             chain=chain,
             settings=settings,
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )
 
         candidate = strategy_selector.select(ctx)

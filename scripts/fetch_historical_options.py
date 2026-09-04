@@ -41,7 +41,7 @@ import csv
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from core.config.settings import get_settings
 
@@ -97,10 +97,10 @@ def main() -> int:
         log(f"ERROR: alpaca-py is not installed or import failed: {exc}. Run: pip install -e .")
         return 1
 
-    start = datetime.strptime(args.start, "%Y-%m-%d")
-    end = datetime.strptime(args.end, "%Y-%m-%d")
+    start = datetime.strptime(args.start, "%Y-%m-%d")  # noqa: DTZ007
+    end = datetime.strptime(args.end, "%Y-%m-%d")  # noqa: DTZ007
     symbol = args.symbol.upper()
-    retrieved_at = datetime.now(timezone.utc).isoformat()
+    retrieved_at = datetime.now(UTC).isoformat()
 
     trading = TradingClient(api_key=settings.alpaca_api_key, secret_key=settings.alpaca_secret_key, paper=True)
     stock_data = StockHistoricalDataClient(api_key=settings.alpaca_api_key, secret_key=settings.alpaca_secret_key)
@@ -188,8 +188,7 @@ def main() -> int:
         writer.writerows(rows)
 
     with open(raw_path, "w", encoding="utf-8") as f:
-        for record in raw_records:
-            f.write(json.dumps(record, default=str) + "\n")
+        f.writelines(json.dumps(record, default=str) + "\n" for record in raw_records)
 
     metadata = {
         "retrieved_at": retrieved_at,

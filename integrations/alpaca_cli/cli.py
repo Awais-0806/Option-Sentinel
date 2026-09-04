@@ -19,7 +19,7 @@ INSTALL_HINT = (
 
 def _run(cmd: list[str], timeout: float = 5.0) -> tuple[bool, str]:
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
         output = (result.stdout or "").strip() or (result.stderr or "").strip()
         return result.returncode == 0, output
     except FileNotFoundError:

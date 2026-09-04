@@ -53,10 +53,12 @@ def check_bid_ask_fidelity(dataset: HistoricalDataset) -> CapabilityCheck:
             return CapabilityCheck(
                 Evaluability.NOT_EVALUATABLE,
                 (
-                    f"all {total_rows} rows have bid=ask=last (no real bid/ask present — "
-                    "this is almost certainly output from scripts/fetch_historical_options.py's "
-                    "get_option_bars() path, which the capability matrix confirms carries no "
-                    "bid/ask). A spread-cost-aware backtest cannot be honestly run on this data.",
+                    (
+                        f"all {total_rows} rows have bid=ask=last (no real bid/ask present — "
+                        "this is almost certainly output from scripts/fetch_historical_options.py's "
+                        "get_option_bars() path, which the capability matrix confirms carries no "
+                        "bid/ask). A spread-cost-aware backtest cannot be honestly run on this data."
+                    ),
                 ),
             )
         pct = synthesized / total_rows if total_rows else 1.0
@@ -95,8 +97,8 @@ def check_strategy_requirements(dataset: HistoricalDataset, requires_iv_or_greek
     if sample_contract.implied_volatility is None and sample_contract.delta is None:
         return CapabilityCheck(
             Evaluability.NOT_EVALUATABLE,
-            ("strategy requires IV/Greeks but dataset carries neither — per the capability matrix, "
-             "this is expected for any dataset built from Alpaca's historical bars endpoint",),
+            (("strategy requires IV/Greeks but dataset carries neither — per the capability matrix, "
+              "this is expected for any dataset built from Alpaca's historical bars endpoint"),),
         )
     return CapabilityCheck(Evaluability.EVALUATABLE, ("IV/Greeks present",))
 

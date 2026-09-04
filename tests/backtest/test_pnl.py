@@ -7,7 +7,7 @@ and copying its output.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from backtest.pnl import COST_BASE, CostAssumptions, entry_to_expiration_pnl
 from core.models.options import OptionContract, OptionRight
@@ -28,7 +28,7 @@ def _bull_call_candidate() -> TradeCandidate:
         legs=(TradeLeg(long_call, "BUY", 1), TradeLeg(short_call, "SELL", 1)),
         rationale="hand-calc fixture", max_profit=680.0, max_loss=320.0, breakeven=(103.2,),
         probability_estimate=None, score=TradeScoreBreakdown(20, 15, 10, 10, 8, 8, 4),
-        size_tier=None, created_at=datetime.now(timezone.utc),
+        size_tier=None, created_at=datetime.now(UTC),
     )
 
 

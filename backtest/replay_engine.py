@@ -20,7 +20,7 @@ engine that could drift from the live pipeline (core/orchestration/pipeline.py).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from agents.options_analyst.validator import OptionContractValidator
 from agents.regime.classifier import RegimeClassifier
@@ -53,7 +53,7 @@ def _bars_up_to(dataset: HistoricalDataset, as_of: date) -> list[PriceBar]:
     a disclosed simplification — see docs/ARCHITECTURE.md backtest notes."""
     return [
         PriceBar(
-            timestamp=datetime.combine(day.as_of_date, datetime.min.time(), tzinfo=timezone.utc),
+            timestamp=datetime.combine(day.as_of_date, datetime.min.time(), tzinfo=UTC),
             open=day.underlying_close, high=day.underlying_close,
             low=day.underlying_close, close=day.underlying_close, volume=0,
         )
@@ -107,7 +107,7 @@ def decide_at(
     ctx = StrategyContext(
         symbol=dataset.underlying, underlying_price=day.underlying_close, regime=regime,
         chain=filtered_chain, settings=settings,
-        now=datetime.combine(as_of, datetime.min.time(), tzinfo=timezone.utc),
+        now=datetime.combine(as_of, datetime.min.time(), tzinfo=UTC),
     )
 
     if forced_strategy is not None:
@@ -117,8 +117,9 @@ def decide_at(
             if not ok:
                 candidate = None
         if candidate is not None:
-            from agents.strategy.scoring import size_tier_for_score
             from dataclasses import replace as _replace
+
+            from agents.strategy.scoring import size_tier_for_score
             candidate = _replace(candidate, size_tier=size_tier_for_score(candidate.score.total, settings))
     else:
         selector = strategy_selector or StrategySelector(settings)
@@ -135,7 +136,7 @@ def decide_at(
     risk_req = TradeRiskRequest(
         candidate=candidate, portfolio=portfolio, proposed_quantity=1,
         client_order_id=f"backtest_{dataset.underlying}_{as_of.isoformat()}_{candidate.trade_id}",
-        now=datetime.combine(as_of, datetime.min.time(), tzinfo=timezone.utc),
+        now=datetime.combine(as_of, datetime.min.time(), tzinfo=UTC),
     )
     decision = sentinel.evaluate(risk_req)
 

@@ -6,7 +6,6 @@ from __future__ import annotations
 from datetime import date
 
 from backtest.runner import BacktestConfig, run_backtest
-from core.config.settings import Settings
 from data.market.synthetic_source import generate_synthetic_dataset
 
 

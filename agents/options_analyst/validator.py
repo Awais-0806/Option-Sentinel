@@ -13,7 +13,7 @@ contracts when selecting strikes.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from core.config.settings import Settings
 from core.models.options import OptionChainSlice, OptionContract
@@ -31,7 +31,7 @@ class OptionContractValidator:
 
     def __init__(self, settings: Settings, *, today: date | None = None):
         self.settings = settings
-        self.today = today or datetime.now(timezone.utc).date()
+        self.today = today or datetime.now(UTC).date()
 
     def validate(self, contract: OptionContract, *, quote_age_seconds: float | None = None) -> tuple[bool, list[str]]:
         reasons: list[str] = []
@@ -66,12 +66,11 @@ class OptionContractValidator:
             )
 
         # ── Spread ────────────────────────────────────────────────────
-        if contract.bid > 0 and contract.ask > 0:
-            if contract.spread_pct > self.settings.max_bid_ask_spread_pct:
-                reasons.append(
-                    f"excessively wide spread: {contract.spread_pct:.1%} > "
-                    f"{self.settings.max_bid_ask_spread_pct:.1%}"
-                )
+        if contract.bid > 0 and contract.ask > 0 and contract.spread_pct > self.settings.max_bid_ask_spread_pct:
+            reasons.append(
+                f"excessively wide spread: {contract.spread_pct:.1%} > "
+                f"{self.settings.max_bid_ask_spread_pct:.1%}"
+            )
 
         # ── Stale quote ───────────────────────────────────────────────
         # Prefer the contract's own quote_timestamp (real Alpaca data) over
@@ -80,7 +79,7 @@ class OptionContractValidator:
         effective_age_seconds = quote_age_seconds
         if contract.quote_timestamp is not None:
             effective_age_seconds = (
-                datetime.now(timezone.utc) - contract.quote_timestamp
+                datetime.now(UTC) - contract.quote_timestamp
             ).total_seconds()
         if effective_age_seconds is not None and effective_age_seconds > self.settings.stale_quote_seconds:
             reasons.append(
