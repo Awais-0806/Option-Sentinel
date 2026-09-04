@@ -1,141 +1,854 @@
-# OptionSentinel
+# 🦂 OptionSentinel
 
-**A regime-aware, defined-risk options system with an independent Risk Sentinel veto.**
+### Autonomous, Regime-Aware Options Trading Agent with Deterministic Risk Control
 
-Built for the Alpaca AI Trading Agents Hackathon.
+**Team Scorpion**
+**Awais Jabbar · Muhammad Ekremah · Alveena Haneef**
 
-## What it does
+> **AI proposes. Risk Sentinel decides.**
 
-OptionSentinel classifies market conditions with deterministic technical signals, selects one of four defined-risk options strategies, scores each candidate transparently, and sends every candidate through a separate, LLM-free Risk Sentinel. A high score never overrides portfolio, liquidity, concentration, drawdown, or circuit-breaker rules.
+OptionSentinel is an autonomous options trading agent built for the **Alpaca AI Trading Agents Hackathon**. It combines deterministic market analysis, defined-risk options strategies, transparent trade scoring, and an independent **Risk Sentinel** that can veto any proposed trade before execution.
 
-| Strategy | Eligible regime | Risk profile |
-|---|---|---|
-| Bull Call Spread | BULLISH | Defined-risk debit spread |
-| Bear Put Spread | BEARISH | Defined-risk debit spread |
-| Iron Condor | RANGE with elevated IV | Defined-risk credit spread |
-| Long Volatility | HIGH_VOLATILITY with high confidence | Capped debit |
+The system is designed around one core principle:
 
-The numerical decision path—regime classification, scoring, sizing, strategy construction, and risk verdicts—is deterministic code. An LLM is only an optional explanatory seam and is never in the execution decision path.
+**The AI can propose a trade, but it cannot bypass the risk engine.**
 
-## Paper-only safety boundary
+All critical trading decisions — market-regime classification, strategy eligibility, trade scoring, position sizing, risk limits, duplicate-order prevention, and execution gating — are handled through deterministic code.
 
-`EXECUTION_MODE` is the only selector for the broker adapter and submission behavior:
+The optional LLM layer is limited to explanation and narration. It does **not** make trading decisions.
 
-| Mode | Data/account adapter | Submission behavior |
-|---|---|---|
-| `DRY_RUN` (default) | Deterministic mock | Never submits or calls Alpaca |
-| `PAPER_SIMULATION` | Deterministic mock | Never submits or calls Alpaca |
-| `PAPER_MANUAL_APPROVAL` | Real Alpaca paper adapter | Builds and risk-checks trades, then stops before submission |
-| `PAPER_AUTONOMOUS` | Real Alpaca paper adapter | Can submit approved orders to an Alpaca **paper** account |
-| `LIVE` | None | Hard-blocked unconditionally |
+---
 
-The adapter refuses every non-paper endpoint, and `LIVE` raises before an adapter can be created. No flag, credential, or confirmation value enables live trading in this build. For a safe demo, leave `EXECUTION_MODE=DRY_RUN`.
+## 🚀 Key Features
 
-## Alpaca integration
+* 📊 **Deterministic market-regime detection**
+* 🤖 **Multi-agent trading pipeline**
+* 📈 **Four defined-risk options strategies**
+* 🛡️ **Independent Risk Sentinel with veto authority**
+* 🎯 **Transparent candidate trade scoring**
+* 💰 **Deterministic position sizing**
+* 🔒 **Portfolio-level and account-level risk controls**
+* 🔁 **Duplicate-order prevention**
+* 🧪 **Offline mock broker for testing**
+* ☁️ **Alpaca paper-trading integration**
+* 🧩 **Broker abstraction through a clean interface**
+* ⚙️ **CLI and MCP integration seams**
+* 📝 **Trade journaling and auditable risk decisions**
+* 🚨 **Emergency account-wide trading halt**
+* 🧑‍💻 **Fully testable modular architecture**
 
-The `BrokerAdapter` protocol keeps the engine separate from Alpaca-specific code. The paper adapter:
+---
 
-- retrieves paginated active option-contract metadata and combines it with option snapshots;
-- maps quote, trade, Greeks, IV, and metadata fields into the internal option model;
-- builds one-leg market orders and 2–4 leg MLEG orders; and
-- maps malformed requests and broker failures to rejected order results.
+# 🧠 What is OptionSentinel?
 
-Offline adapter mapping tests and a read-only `PAPER_MANUAL_APPROVAL` paper-account check have succeeded. Option-chain data, market-data entitlements, and paper-order submission remain unverified; no paper order has been placed as part of this project handoff.
+OptionSentinel is a **regime-aware, multi-agent options trading system**.
 
-## Local setup
+Instead of allowing an LLM to directly determine whether a trade should be executed, the system separates intelligence from execution authority.
+
+The pipeline:
+
+```text
+Market Data
+     ↓
+Market Scout
+     ↓
+Regime Analyst
+     ↓
+Options Analyst
+     ↓
+Strategy Agent
+     ↓
+Risk Sentinel
+     ↓
+Execution Agent
+     ↓
+Portfolio Monitor
+     ↓
+Exit Agent
+```
+
+Each stage is implemented as a separate, testable module.
+
+The complete orchestration is handled by:
+
+```text
+core/orchestration/pipeline.py
+```
+
+This allows the same architecture to be used for offline simulations, paper trading, testing, and future production integrations.
+
+---
+
+# 🏗️ System Architecture
+
+```text
+                         ┌─────────────────────┐
+                         │     Market Data     │
+                         └──────────┬──────────┘
+                                    ↓
+                         ┌─────────────────────┐
+                         │    Market Scout     │
+                         └──────────┬──────────┘
+                                    ↓
+                         ┌─────────────────────┐
+                         │   Regime Analyst    │
+                         └──────────┬──────────┘
+                                    ↓
+                         ┌─────────────────────┐
+                         │   Options Analyst   │
+                         └──────────┬──────────┘
+                                    ↓
+                         ┌─────────────────────┐
+                         │   Strategy Agent    │
+                         └──────────┬──────────┘
+                                    ↓
+                    ┌──────────────────────────────┐
+                    │        RISK SENTINEL         │
+                    │                              │
+                    │  Deterministic Risk Engine  │
+                    │  Independent Trade Veto     │
+                    └──────────────┬───────────────┘
+                                   ↓
+                         ┌─────────────────────┐
+                         │  Execution Agent    │
+                         └──────────┬──────────┘
+                                    ↓
+                         ┌─────────────────────┐
+                         │ Portfolio Monitor   │
+                         └──────────┬──────────┘
+                                    ↓
+                         ┌─────────────────────┐
+                         │     Exit Agent      │
+                         └─────────────────────┘
+```
+
+### Design Principle
+
+The strategy engine and risk engine are intentionally separated.
+
+```text
+Strategy Intelligence ≠ Execution Authority
+```
+
+A highly scored trade can still be rejected by the Risk Sentinel.
+
+---
+
+# 📈 Options Strategies
+
+OptionSentinel currently supports four defined-risk strategies.
+
+| Strategy                       | Eligible Regime                   | Risk Profile             |
+| ------------------------------ | --------------------------------- | ------------------------ |
+| **Bull Call Spread**           | BULLISH                           | Defined-risk debit       |
+| **Bear Put Spread**            | BEARISH                           | Defined-risk debit       |
+| **Iron Condor**                | RANGE + elevated IV               | Defined-risk credit      |
+| **Long Volatility / Straddle** | HIGH_VOLATILITY + high confidence | Defined-risk entry debit |
+
+## Strategy Selection
+
+Strategies are **regime-aware**.
+
+The system does not simply search for an options trade and execute it.
+
+Instead:
+
+```text
+Market Conditions
+       ↓
+Regime Classification
+       ↓
+Eligible Strategies
+       ↓
+Candidate Generation
+       ↓
+Trade Scoring
+       ↓
+Risk Validation
+       ↓
+Execution
+```
+
+For example, the `long_volatility.py` strategy does not activate for every high-volatility signal.
+
+It requires sufficiently high confidence and must still pass all Risk Sentinel checks.
+
+---
+
+# 🛡️ Risk Sentinel
+
+The **Risk Sentinel** is the most important safety component in OptionSentinel.
+
+Located in:
+
+```text
+risk/veto.py
+```
+
+it provides an independent, deterministic authorization layer between strategy generation and order execution.
+
+### Risk Rules
+
+`risk/limits.py` contains **13 independent deterministic risk rules**, covering areas such as:
+
+* Buying-power validation
+* Maximum trade risk
+* Maximum portfolio risk
+* Position concentration
+* Drawdown protection
+* Daily loss protection
+* Liquidity checks
+* Duplicate-order prevention
+* Stale-market-data detection
+* Contract sanity checks
+* Position-size constraints
+* Execution safety checks
+* Account-level trading halts
+
+The exact risk implementation is intentionally deterministic and does not depend on LLM output.
+
+---
+
+# ⚖️ Risk Verdicts
+
+Every candidate trade must receive one of four verdicts:
+
+### ✅ APPROVE
+
+The trade passes all risk checks and can proceed at its calculated size.
+
+### ⚠️ REDUCE_SIZE
+
+The trade is acceptable, but the requested position size exceeds a safety constraint.
+
+The Risk Sentinel calculates a smaller permissible quantity.
+
+### ❌ REJECT
+
+The trade is blocked.
+
+The system records itemized reasons explaining exactly which risk rules failed.
+
+### 🚨 EMERGENCY_HALT
+
+An account-wide circuit breaker is triggered.
+
+Examples include:
+
+* Excessive drawdown
+* Daily loss threshold breach
+* Repeated rejected trades
+* Other critical account-level conditions
+
+Once triggered:
+
+```text
+NO NEW ENTRIES
+```
+
+regardless of trade quality.
+
+---
+
+# 🔐 Why the Risk Layer Matters
+
+A central design goal of OptionSentinel is preventing an AI component from directly controlling execution.
+
+For example:
+
+```text
+Trade Score = 98/100
+        ↓
+Risk Check
+        ↓
+Concentration Limit Exceeded
+        ↓
+REJECT
+```
+
+This means a high-confidence or high-scoring strategy **cannot bypass hardcoded safety constraints**.
+
+### Core philosophy
+
+> **AI proposes. Deterministic controls decide.**
+
+---
+
+# 🤖 Multi-Agent Architecture
+
+OptionSentinel divides the trading workflow into specialized agents.
+
+### Market Scout
+
+Collects and normalizes market information.
+
+### Regime Analyst
+
+Determines whether the market is:
+
+```text
+BULLISH
+BEARISH
+RANGE
+HIGH_VOLATILITY
+```
+
+using deterministic technical signals.
+
+### Options Analyst
+
+Evaluates available options contracts and relevant market characteristics.
+
+### Strategy Agent
+
+Generates candidate trades based on the current regime.
+
+### Risk Sentinel
+
+Independently validates every candidate.
+
+### Execution Agent
+
+Submits only trades that pass execution gating.
+
+### Portfolio Monitor
+
+Tracks open positions and portfolio state.
+
+### Exit Agent
+
+Determines when an existing position should be closed according to deterministic rules.
+
+---
+
+# 🧩 Broker Architecture
+
+OptionSentinel uses a broker abstraction so that the trading logic does not depend directly on Alpaca.
+
+The core interface is:
+
+```text
+core/interfaces/broker.py
+```
+
+which defines the `BrokerAdapter` protocol.
+
+The rest of the system depends on this interface rather than Alpaca-specific implementation details.
+
+### Implementations
+
+#### Real Alpaca Adapter
+
+```text
+integrations/alpaca/adapter.py
+```
+
+Provides Alpaca paper/live REST integration through `alpaca-py`.
+
+#### Mock Adapter
+
+```text
+integrations/alpaca/mock_adapter.py
+```
+
+Provides deterministic synthetic market and account data.
+
+The mock adapter is used by:
+
+* `DRY_RUN`
+* Offline testing
+* Simulation
+* Unit tests
+* CI workflows
+
+This makes the core trading pipeline reproducible even without Alpaca credentials.
+
+---
+
+# 🔌 MCP & CLI Integration
+
+## MCP
+
+```text
+integrations/alpaca_mcp/client.py
+```
+
+documents the integration seam for using OptionSentinel through an MCP-connected agent session.
+
+The autonomous trading pipeline does **not** require MCP to operate.
+
+## Alpaca CLI
+
+```text
+integrations/alpaca_cli/cli.py
+```
+
+detects and health-checks the Alpaca CLI when available.
+
+The application does not require the CLI to be installed.
+
+Running:
 
 ```bash
-git clone <this-repo>
-cd optionsentinel
-cp .env.example .env
+python -m scripts.health_check
+```
+
+reports the CLI state and continues gracefully if it is unavailable.
+
+---
+
+# ⚙️ Execution Modes
+
+Execution behavior is controlled by:
+
+```env
+EXECUTION_MODE
+```
+
+| Mode                    | Adapter           | Submits Orders? |
+| ----------------------- | ----------------- | --------------- |
+| `DRY_RUN`               | Mock              | ❌ Never         |
+| `PAPER_SIMULATION`      | Mock              | ❌ Never         |
+| `PAPER_MANUAL_APPROVAL` | Real Alpaca Paper | ❌ Never         |
+| `PAPER_AUTONOMOUS`      | Real Alpaca Paper | ✅ Yes           |
+| `LIVE`                  | —                 | 🚫 Hard-blocked |
+
+### DRY_RUN
+
+Safe offline execution using deterministic mock data.
+
+### PAPER_SIMULATION
+
+Simulated paper environment without real broker submissions.
+
+### PAPER_MANUAL_APPROVAL
+
+Uses the real Alpaca paper environment to build and validate trades, but stops before order submission.
+
+### PAPER_AUTONOMOUS
+
+Allows approved trades to be submitted automatically to the Alpaca paper account.
+
+Only:
+
+```text
+APPROVE
+REDUCE_SIZE
+```
+
+verdicts are eligible for execution.
+
+### LIVE
+
+Live trading is intentionally hard-blocked.
+
+The system cannot automatically escalate itself into live trading.
+
+---
+
+# 🔒 Credential & Execution Safety
+
+`PAPER_MANUAL_APPROVAL` and `PAPER_AUTONOMOUS` require valid Alpaca credentials.
+
+The application refuses to start these modes when credentials are missing or still contain placeholder values.
+
+Example:
+
+```env
+APCA_API_KEY_ID=your_paper_key_id
+APCA_API_SECRET_KEY=your_paper_secret_key
+
+ALPACA_ENV=paper
+
+EXECUTION_MODE=DRY_RUN
+
+ALPACA_LIVE_TRADING_CONFIRMED=false
+```
+
+---
+
+# 🧪 Testing
+
+OptionSentinel is designed to be testable without access to a real brokerage account.
+
+### Install development dependencies
+
+```bash
 make dev-install
-make health
 ```
 
-The default `.env` is safe: `ALPACA_ENV=paper` and `EXECUTION_MODE=DRY_RUN`. `make health` uses the mock adapter in either mock mode and makes no network calls.
+### Run the complete test suite
 
-To use a real Alpaca **paper** account, set exactly one supported credential scheme in `.env`:
-
-```dotenv
-APCA_API_KEY_ID=your_paper_key
-APCA_API_SECRET_KEY=your_paper_secret
-# Legacy aliases also work: ALPACA_API_KEY and ALPACA_SECRET_KEY.
+```bash
+make test
 ```
 
-Then explicitly set `EXECUTION_MODE=PAPER_MANUAL_APPROVAL` for read-only pipeline validation. Do not use `PAPER_AUTONOMOUS` for the demo; it is the only mode that can submit a paper order.
-
-## Tests and checks
+### Unit tests
 
 ```bash
 make test-unit
-make test-backtest
-make test-sim
-pytest -v --ignore=tests/integration  # complete offline suite
-make lint
 ```
 
-Credentialed checks are opt-in and separate:
+Covers:
+
+* Regime classification
+* Trade scoring
+* Risk rules
+* Strategy eligibility
+* Position sizing
+* Failure modes
+* Safety controls
+
+### Full offline simulation
+
+```bash
+make test-sim
+```
+
+### Integration tests
 
 ```bash
 make test-integration
 ```
 
-The integration suite auto-skips without credentials. Its order-submission test has a second explicit environment gate and is intentionally a documented no-op until a manual approval workflow exists.
+Integration tests require real Alpaca paper credentials and automatically skip when they are unavailable.
 
-## API demo
+---
 
-Start the local API with the safe default:
+# ✅ Current Test Status
 
-```bash
-make run
+The current offline suite contains:
+
+```text
+106 tests passed
+1 test skipped
+1 deprecation warning
 ```
 
-In another terminal:
+The skipped test requires explicit order-submission opt-in.
+
+A dedicated risk regression test also demonstrates that:
+
+> A high-scoring trade can still be rejected because of portfolio concentration risk.
+
+This validates the separation between **trade quality** and **risk authorization**.
+
+---
+
+# 🚀 Getting Started
+
+## 1. Clone the repository
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/account
-curl -X POST http://127.0.0.1:8000/pipeline/run \
-  -H "Content-Type: application/json" \
-  -d '{"symbols":["SPY"]}'
+git clone <YOUR_GITHUB_REPOSITORY_URL>
+cd optionsentinel
 ```
 
-In `DRY_RUN`, `/health` and `/pipeline/run` report `data_source: "MOCK"`; the pipeline exercises the same deterministic strategy and Risk Sentinel code without contacting Alpaca.
+## 2. Create a virtual environment
 
-## Backtest
-
-Run the fixed-seed synthetic experiment:
+### Windows
 
 ```bash
-python -m scripts.run_backtest \
-  --symbol SPY \
-  --start 2025-06-01 \
-  --end 2026-03-20 \
-  --data synthetic
+python -m venv .venv
+.venv\Scripts\activate
 ```
 
-The command writes a deterministic JSON report to `data/historical/` with strategy metrics, cost sensitivity, and a matching buy-and-hold benchmark. The directory is intentionally ignored because it can contain fetched local market data. See [reports/performance.md](reports/performance.md) for the exact synthetic comparison, assumptions, and limitations.
+### macOS / Linux
 
-## Three-to-five-minute demo
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
-1. Run `make health` and show `EXECUTION_MODE: DRY_RUN` with a mock source.
-2. Start the API, call `/health` and `/account`, then run `POST /pipeline/run` for `SPY`.
-3. Walk through the pipeline summary and one candidate’s Risk Sentinel verdict; explain that a strong score still cannot bypass risk controls.
-4. Run `make test-backtest` or the synthetic backtest command and open `reports/performance.md`.
-5. Point out the execution-mode table: the demo is mock-only, paper execution is explicit, and live execution is impossible in this build.
+## 3. Install dependencies
 
-## Known limitations
+```bash
+pip install -e ".[dev]"
+```
 
-- A read-only `PAPER_MANUAL_APPROVAL` check successfully retrieved a paper-account snapshot. Option-chain behavior, market-data entitlements, and order submission remain unverified; offline SDK-shape tests are not a replacement for those checks.
-- Snapshot `latest_trade.size` is a latest-print proxy, not confirmed cumulative daily option volume.
-- Alpaca historical option bars omit historical bid/ask, IV, Greeks, and open-interest series. The backtest capability gate refuses unsupported data rather than inventing those fields; see [docs/ALPACA_DATA_CAPABILITY_MATRIX.md](docs/ALPACA_DATA_CAPABILITY_MATRIX.md).
-- There is no dashboard, persistence wiring for pipeline runs, or live exit-management workflow. Positions in the default backtest hold to expiration; positions still open at the sample end are reported separately.
-- There is no manual-approval UI or CLI. `PAPER_MANUAL_APPROVAL` intentionally stops before submission.
+## 4. Configure environment variables
 
-## Architecture
+Copy the example environment file:
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the pipeline, safety gates, data caveats, and deterministic/LLM boundary.
+```bash
+cp .env.example .env
+```
 
-## License
+Then configure:
 
-MIT — see `LICENSE`.
+```env
+APCA_API_KEY_ID=your_paper_key_id
+APCA_API_SECRET_KEY=your_paper_secret_key
+
+ALPACA_ENV=paper
+
+EXECUTION_MODE=DRY_RUN
+
+ALPACA_LIVE_TRADING_CONFIRMED=false
+```
+
+### Optional LLM Explanation Layer
+
+```env
+FEATHERLESS_API_KEY=your_featherless_key
+FEATHERLESS_BASE_URL=https://api.featherless.ai/v1
+FEATHERLESS_MODEL=meta-llama/Meta-Llama-3-70B-Instruct
+```
+
+The LLM is optional and is used for explanation/narration rather than core trading decisions.
+
+---
+
+# 🩺 Health Check
+
+Run:
+
+```bash
+python -m scripts.health_check
+```
+
+The health check validates the configured environment and reports integration status.
+
+Without credentials, OptionSentinel automatically falls back to the mock broker where supported.
+
+---
+
+# ▶️ Run the Autonomous Pipeline
+
+Start a dry run with:
+
+```bash
+python -m core.orchestration.pipeline
+```
+
+Recommended first execution mode:
+
+```env
+EXECUTION_MODE=DRY_RUN
+```
+
+This allows the complete pipeline to be evaluated without submitting orders.
+
+---
+
+# 🎬 Hackathon Demo Flow
+
+A typical **3–5 minute demonstration** can follow this sequence:
+
+### 1. Health Check
+
+```bash
+python -m scripts.health_check
+```
+
+Demonstrate the broker/integration status.
+
+### 2. Run the Pipeline
+
+```bash
+python -m core.orchestration.pipeline
+```
+
+Show the progression:
+
+```text
+Market Scout
+→ Regime Analyst
+→ Options Analyst
+→ Strategy Agent
+→ Risk Sentinel
+→ Execution
+```
+
+### 3. Show Risk Decisions
+
+Display at least:
+
+```text
+APPROVE
+```
+
+and:
+
+```text
+REJECT
+```
+
+or:
+
+```text
+REDUCE_SIZE
+```
+
+from the trade journal.
+
+### 4. Demonstrate Execution
+
+For a controlled paper-trading demonstration, place a small test order and verify the resulting position state.
+
+```bash
+python check_positions.py
+```
+
+### 5. Show Performance Results
+
+Open:
+
+```text
+reports/performance.md
+```
+
+Synthetic/backtest results should remain clearly labeled as simulated results.
+
+---
+
+# 📁 Project Structure
+
+```text
+optionsentinel/
+│
+├── agents/
+│   ├── market_scout.py
+│   ├── regime_analyst.py
+│   ├── options_analyst.py
+│   ├── strategy_agent.py
+│   ├── execution_agent.py
+│   ├── portfolio_monitor.py
+│   └── exit_agent.py
+│
+├── strategies/
+│   ├── bull_call_spread.py
+│   ├── bear_put_spread.py
+│   ├── iron_condor.py
+│   └── long_volatility.py
+│
+├── risk/
+│   ├── limits.py
+│   └── veto.py
+│
+├── core/
+│   ├── interfaces/
+│   │   └── broker.py
+│   └── orchestration/
+│       └── pipeline.py
+│
+├── integrations/
+│   ├── alpaca/
+│   │   ├── adapter.py
+│   │   └── mock_adapter.py
+│   │
+│   ├── alpaca_mcp/
+│   │   └── client.py
+│   │
+│   └── alpaca_cli/
+│       └── cli.py
+│
+├── tests/
+│   └── unit/
+│       └── test_risk.py
+│
+├── reports/
+│   └── performance.md
+│
+├── scripts/
+│   └── health_check.py
+│
+├── check_positions.py
+├── .env.example
+├── pyproject.toml
+├── Makefile
+└── README.md
+```
+
+---
+
+# 📊 Design Philosophy
+
+OptionSentinel is built around five principles:
+
+### 1. Deterministic over opaque
+
+Critical trading decisions are reproducible and auditable.
+
+### 2. Risk before execution
+
+No strategy can bypass the Risk Sentinel.
+
+### 3. Defined-risk strategies
+
+The system focuses on options structures with explicitly constrained downside.
+
+### 4. Broker independence
+
+Trading logic communicates through a broker abstraction rather than Alpaca-specific code.
+
+### 5. Safe-by-default execution
+
+The default mode is:
+
+```text
+DRY_RUN
+```
+
+and live trading is hard-blocked.
+
+---
+
+# ⚠️ Known Limitations
+
+OptionSentinel is a hackathon project and is not presented as a production-ready financial system.
+
+Current limitations include:
+
+* Real Alpaca option-chain retrieval is implemented but should be validated against live paper responses before relying on complex multi-leg construction.
+* Multi-leg options order submission may require additional validation with Alpaca paper-trading responses.
+* There is currently no frontend dashboard.
+* FastAPI endpoints exist, but the persistence layer is not fully wired into the live pipeline.
+* News/catalyst scoring is currently a placeholder.
+* `probability_estimate` is currently `None`.
+* Backtest/performance data should be interpreted as synthetic unless explicitly identified otherwise.
+
+---
+
+# ⚠️ Disclaimer
+
+OptionSentinel is an experimental software project created for the **Alpaca AI Trading Agents Hackathon**.
+
+It is **not financial advice**, and it should not be interpreted as a recommendation to buy or sell securities or options.
+
+Options trading involves substantial risk and may result in significant losses.
+
+---
+
+# 👥 Team Scorpion
+
+### 🦂 Team Scorpion
+
+**Awais Jabbar**
+Backend · UI/UX · DevOps · Team Captain
+
+**Muhammad Ekremah**
+AI/ML · API Integration
+
+**Alveena Haneef**
+Team Member
+
+---
+
+# 🏆 Built for the Alpaca AI Trading Agents Hackathon
+
+**Project:** OptionSentinel
+**Team:** Team Scorpion
+**Platform:** Alpaca Trading API
+**Architecture:** Multi-Agent + Deterministic Risk Engine
+**Primary Environment:** Paper Trading / Dry Run
+
+> **AI proposes. Risk Sentinel decides.**
+
+---
+
+# 📄 License
+
+This project is licensed under the **MIT License**.
+
+See [`LICENSE`](LICENSE) for details.
