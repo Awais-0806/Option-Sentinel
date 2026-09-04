@@ -1,36 +1,40 @@
-# OptionSentinel — Hackathon One-Pager (Draft)
-
-*Status: Day 1 draft. Sections marked [MEASURE] need real numbers from a
-paper-trading run before submission — nothing below is fabricated, and
-nothing should be filled in with invented performance figures later either.*
+# OptionSentinel — Hackathon One-Pager
 
 ## AI logic
 
-OptionSentinel classifies market regime from price history using deterministic technical features (trend, RSI, ATR, realized volatility, momentum) — not an LLM guess. Four defined-risk options strategies are each eligible only under specific regime conditions, so the system doesn't force a trade when conditions don't fit. Every candidate trade is scored transparently across seven weighted factors (regime confidence, options signal, volatility edge, momentum, liquidity, risk/reward, catalyst).
+OptionSentinel classifies market regime from deterministic technical features—trend, RSI, ATR, realized volatility, and momentum—not an LLM guess. Four defined-risk options strategies are eligible only in matching regimes, so the system can decline to trade rather than force a signal. Each candidate is scored across seven transparent factors: regime confidence, option signal, volatility edge, momentum, liquidity, risk/reward, and catalyst.
 
 ## Risk gates
 
-The Risk Sentinel evaluates every trade candidate independently of its score, across 13 deterministic rules — buying power, trade/portfolio risk limits, concentration, drawdown, daily loss, liquidity, duplicate-order prevention, stale-data detection, and more. It can approve, reduce size, reject, or trip an account-wide emergency halt. A high score does not bypass this layer: `tests/unit/test_risk.py` includes a direct regression test where a trade candidate is rejected purely on concentration risk regardless of its score.
+The Risk Sentinel evaluates every candidate independently of its score across deterministic portfolio, buying-power, concentration, drawdown, daily-loss, liquidity, stale-data, duplicate-order, and contract-sanity rules. It can approve, reduce size, reject, or trigger an account-wide emergency halt. `tests/unit/test_risk.py` includes a regression that proves a high-scoring candidate can be rejected on concentration risk alone.
 
 ## Alpaca implementation
 
-- **Trading API**: `integrations/alpaca/adapter.py`, behind a `BrokerAdapter` interface so the entire engine is broker-agnostic in principle and Alpaca-specific in practice for this build.
-- **MCP**: documented integration seam (`integrations/alpaca_mcp/client.py`) for agent-driven sessions; not on the autonomous pipeline's critical path by design.
-- **CLI**: health-check and diagnostics (`integrations/alpaca_cli/cli.py`), optional, never a hard dependency.
+- **Trading API:** `integrations/alpaca/adapter.py` implements paper-only contract metadata pagination, option-snapshot mapping, and single-leg/2–4 leg MLEG order construction behind a `BrokerAdapter` interface.
+- **Safety:** `DRY_RUN` is the default; `LIVE` is hard-blocked. `PAPER_MANUAL_APPROVAL` stops before submission, while `PAPER_AUTONOMOUS` is an explicit paper-order opt-in.
+- **MCP:** `integrations/alpaca_mcp/client.py` is an optional agent-session seam, not a pipeline dependency.
+- **CLI:** `integrations/alpaca_cli/cli.py` offers optional diagnostics without becoming a runtime dependency.
+
+The adapter has offline SDK-shape coverage, but its authenticated paper endpoint behavior has not yet been manually exercised and no paper order has been placed for this project handoff.
 
 ## Innovation
 
-Most "AI trading agent" hackathon entries ask an LLM "buy or sell?" and execute the answer. OptionSentinel's numerical decision path — regime, scoring, sizing, risk — is 100% deterministic and independently unit-tested; the LLM (where used) narrates and explains, never decides. The Risk Sentinel's veto is a first-class, demoable feature, not a disclaimer: it appears in the structured event log and the trade journal every time it fires.
+Many trading-agent demos ask an LLM for a direction and execute it. OptionSentinel keeps the numerical decision path—regime, strategy, scoring, sizing, and risk—deterministic and independently testable. LLM use is limited to optional explanation; it cannot override the Risk Sentinel.
 
-## Evaluation
+## Synthetic evaluation
 
-[MEASURE] The following will be reported from an actual paper-trading run before submission, not estimated in advance:
+A fixed-seed synthetic comparison is documented in [reports/performance.md](../reports/performance.md). It is **not** paper-account, live, or historical-options P&L.
 
-- P&L (realized, from the trade journal)
-- Win rate and average trade
-- Max drawdown observed during the run
-- Trade frequency (opportunities scanned vs. trades approved vs. trades rejected)
-- Strategy-level contribution (which of the four strategies fired, how often, with what outcome)
-- Risk violations prevented — count of REJECT / REDUCE_SIZE / EMERGENCY_HALT verdicts, with reasons, pulled directly from `risk_checks` in the audit trail
+| Metric | OptionSentinel | Buy and hold |
+|---|---:|---:|
+| Period | 2025-06-01 to 2026-03-20 | Same warmup-adjusted window |
+| Total result | $1,637 realized P&L (1.64% of $100,000) | -16.25% return |
+| Completed trades | 20 | N/A |
+| Win rate | 50.0% | N/A |
+| Maximum drawdown | 2.74% realized-equity drawdown | 28.22% |
 
-No performance numbers are fabricated in this document. Where a section says [MEASURE], it stays empty until there is a real run to report.
+The strategy sample ended with eight open positions, uses a hold-to-expiration model, and uses synthetic option quotes. It is useful only as a reproducible systems test and comparison artifact, not evidence of expected returns. The report records capability status, cost assumptions, leakage/survivorship tests, and all limitations.
+
+## What remains to measure
+
+Actual paper-trading metrics remain intentionally unreported until a separate read-only paper-account validation and an explicitly approved paper-execution experiment have occurred. Those future measurements should include realized P&L, win rate, observed drawdown, trade frequency, strategy contribution, and prevented-risk verdicts from persisted audit data.

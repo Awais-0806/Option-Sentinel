@@ -18,8 +18,8 @@ import argparse
 import json
 import sys
 from dataclasses import asdict
-from datetime import datetime
 
+from backtest.baselines import run_buy_and_hold
 from backtest.data_capability import gate_dataset_for_backtest
 from backtest.pnl import COST_BASE, COST_HIGH, COST_LOW
 from backtest.runner import BacktestConfig, run_backtest
@@ -83,7 +83,6 @@ def main() -> int:
     ]
 
     report = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
         "dataset": dataset.label(),
         "dataset_provenance": dataset.provenance.value,
         "dataset_metadata": dataset.metadata,
@@ -94,9 +93,19 @@ def main() -> int:
         },
         "risk_sentinel": "core risk.veto.RiskSentinel — identical class used by the live pipeline",
         "exit_model": "HOLD_TO_EXPIRATION (no early-exit rule implemented)",
+        "buy_and_hold": asdict(
+            run_buy_and_hold(
+                dataset,
+                starting_equity=args.starting_equity,
+                warmup_days=args.warmup_days,
+            )
+        ),
         "strategies": {},
         "cost_sensitivity": {},
     }
+
+    print("=== Buy and hold ===")
+    print(json.dumps(report["buy_and_hold"], default=str, indent=2))
 
     for cfg in configs:
         result = run_backtest(dataset, settings, cfg)

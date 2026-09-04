@@ -4,7 +4,7 @@ your own paper credentials, and save it as a CSV that
 data/market/csv_source.py can load (provenance=REAL_USER_SUPPLIED_CSV).
 
 Usage (Windows PowerShell, after `pip install -e .` and setting real
-ALPACA_API_KEY/ALPACA_SECRET_KEY in .env):
+APCA_API_KEY_ID/APCA_API_SECRET_KEY in .env; legacy ALPACA_* aliases also work):
 
     python -m scripts.fetch_historical_options --symbol SPY --start 2025-11-01 --end 2026-01-15
 
@@ -78,8 +78,9 @@ def main() -> int:
 
     settings = get_settings()
     if not (settings.alpaca_api_key and settings.alpaca_secret_key):
-        log("ERROR: ALPACA_API_KEY/ALPACA_SECRET_KEY not set in .env. This script needs real "
-            "paper credentials — it only reads, never trades, but it does need real market-data access.")
+        log("ERROR: APCA_API_KEY_ID/APCA_API_SECRET_KEY (or legacy ALPACA_* aliases) are not "
+            "set in .env. This script needs real paper credentials — it only reads, never trades, "
+            "but it does need real market-data access.")
         return 1
 
     try:

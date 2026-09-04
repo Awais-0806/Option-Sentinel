@@ -1,4 +1,4 @@
-.PHONY: install dev-install health test test-unit test-integration test-sim lint format run docker-build docker-up
+.PHONY: install dev-install health test test-unit test-integration test-sim test-backtest lint format run docker-build docker-up
 
 install:
 	pip install -e . --break-system-packages
@@ -20,6 +20,9 @@ test-integration:
 
 test-sim:
 	pytest tests/simulation -v
+
+test-backtest:
+	pytest tests/backtest -v
 
 lint:
 	ruff check .

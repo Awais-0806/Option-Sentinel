@@ -268,3 +268,70 @@ def test_submit_order_refuses_live_endpoint_even_with_valid_request():
 
     with _pytest.raises(LiveTradingDisabledError):
         adapter.submit_order(legs=[], quantity=1, client_order_id="cid", limit_price=None)
+
+
+def test_get_option_chain_fetches_all_metadata_pages():
+    adapter = _adapter_instance()
+    adapter.settings = SimpleNamespace(alpaca_env=SimpleNamespace(value="paper"))
+    meta1 = _fake_contract_meta(symbol="AAPL240119C00100000")
+    meta2 = _fake_contract_meta(symbol="AAPL240119P00100000", type="put")
+    requests = []
+
+    class FakeTrading:
+        def get_option_contracts(self, request):
+            requests.append(request)
+            if len(requests) == 1:
+                return SimpleNamespace(option_contracts=[meta1], next_page_token="second-page")
+            return SimpleNamespace(option_contracts=[meta2], next_page_token=None)
+
+    class FakeOptionData:
+        def get_option_chain(self, request):
+            return {}
+
+    adapter._trading = FakeTrading()
+    adapter._option_data = FakeOptionData()
+
+    chain = adapter.get_option_chain("AAPL", min_dte=14, max_dte=45)
+
+    assert len(chain.contracts) == 2
+    assert requests[0].limit == 10000
+    assert requests[1].page_token == "second-page"
+
+
+def test_submit_order_builds_single_leg_market_order():
+    adapter = _adapter_instance()
+    adapter.settings = SimpleNamespace(alpaca_env=SimpleNamespace(value="paper"))
+    captured = {}
+
+    class FakeTrading:
+        def submit_order(self, request):
+            captured["request"] = request
+            return SimpleNamespace(
+                id="order-456", client_order_id="cid-single", status="accepted",
+                filled_qty="0", submitted_at=datetime.now(timezone.utc),
+            )
+
+    adapter._trading = FakeTrading()
+    result = adapter.submit_order(
+        legs=[{"symbol": "AAPL260301C00100000", "side": "buy", "quantity": 2}],
+        quantity=3,
+        client_order_id="cid-single",
+        limit_price=None,
+    )
+
+    assert captured["request"].symbol == "AAPL260301C00100000"
+    assert captured["request"].side.value == "buy"
+    assert captured["request"].qty == 6
+    assert result.status == "accepted"
+    assert result.raw == {"order_class": "SINGLE", "legs": 1}
+
+
+def test_submit_order_returns_rejection_when_request_fails():
+    adapter = _adapter_instance()
+    adapter.settings = SimpleNamespace(alpaca_env=SimpleNamespace(value="paper"))
+
+    result = adapter.submit_order(legs=[], quantity=1, client_order_id="cid-fail", limit_price=None)
+
+    assert result.status == "rejected"
+    assert result.order_id == ""
+    assert result.client_order_id == "cid-fail"

@@ -35,10 +35,9 @@ class AlpacaBrokerAdapter:
     def __init__(self, settings: Settings):
         self.settings = settings
 
-        if settings.alpaca_env.value == "live" and not settings.is_live_trading_permitted:
+        if settings.alpaca_env.value != "paper":
             raise LiveTradingDisabledError(
-                "ALPACA_ENV=live but ALPACA_LIVE_TRADING_CONFIRMED is not set. "
-                "This build does not implement live execution. Refusing to start."
+                "Live Alpaca access is disabled in this build. Set ALPACA_ENV=paper."
             )
 
         try:
@@ -51,11 +50,10 @@ class AlpacaBrokerAdapter:
                 "(see pyproject.toml) or use the mock adapter for offline development."
             ) from exc
 
-        paper = settings.alpaca_env.value == "paper"
         self._trading = TradingClient(
             api_key=settings.alpaca_api_key,
             secret_key=settings.alpaca_secret_key,
-            paper=paper,
+            paper=True,
         )
         self._stock_data = StockHistoricalDataClient(
             api_key=settings.alpaca_api_key, secret_key=settings.alpaca_secret_key
@@ -108,48 +106,54 @@ class AlpacaBrokerAdapter:
             for b in rows[-lookback_days:]
         ]
 
-    def get_option_chain(self, symbol: str, min_dte: int, max_dte: int) -> OptionChainSlice:
-        """
-        Two-call design, matching Alpaca's actual API split (confirmed against
-        current official docs/examples — see docs/ARCHITECTURE.md "Alpaca API
-        grounding notes"):
-
-        1. TradingClient.get_option_contracts(GetOptionContractsRequest) —
-           contract METADATA: strike, expiration, call/put type, and
-           open_interest (with up to a 1-day lag; Alpaca computes OI from
-           OCC end-of-day data, not live).
-        2. OptionHistoricalDataClient.get_option_chain(OptionChainRequest) —
-           live snapshot: latest quote (bid/ask), latest trade, greeks,
-           implied volatility, keyed by contract symbol.
-
-        Every contract is normalized into our own core.models.options
-        OptionContract — the strategy layer never sees an Alpaca SDK object.
-
-        NOT LIVE-VERIFIED: this method is grounded in current official
-        alpaca-py example notebooks (bull-call-spread, iron-condor) and API
-        docs, but has not been executed against a live paper account by
-        Claude — no network/credentials in this sandbox. See the Phase C
-        report for exactly what that means for trust level.
-        """
+    def get_option_chain(
+        self,
+        symbol: str,
+        min_dte: int,
+        max_dte: int,
+        option_type: str | OptionRight | None = None,
+    ) -> OptionChainSlice:
+        """Fetch active Alpaca option contracts and their latest snapshots."""
         from alpaca.data.enums import OptionsFeed
         from alpaca.data.requests import OptionChainRequest
-        from alpaca.trading.enums import AssetStatus
+        from alpaca.trading.enums import AssetStatus, ContractType
         from alpaca.trading.requests import GetOptionContractsRequest
 
         today = date.today()
         exp_gte = today + timedelta(days=min_dte)
         exp_lte = today + timedelta(days=max_dte)
+        fetched_at = datetime.now(timezone.utc).isoformat()
 
-        contracts_req = GetOptionContractsRequest(
-            underlying_symbols=[symbol],
-            status=AssetStatus.ACTIVE,
-            expiration_date_gte=exp_gte,
-            expiration_date_lte=exp_lte,
-        )
-        contracts_resp = self._trading.get_option_contracts(contracts_req)
-        contract_meta = list(getattr(contracts_resp, "option_contracts", []) or [])
-        if not contract_meta:
-            return OptionChainSlice(underlying=symbol, fetched_at=datetime.now(timezone.utc).isoformat(), contracts=())
+        try:
+            option_contracts = []
+            page_token = None
+            while True:
+                request_kwargs = {
+                    "underlying_symbols": [symbol],
+                    "status": AssetStatus.ACTIVE,
+                    "expiration_date_gte": exp_gte,
+                    "expiration_date_lte": exp_lte,
+                    "limit": 10000,
+                }
+                if option_type is not None:
+                    requested_type = str(getattr(option_type, "value", option_type)).lower()
+                    request_kwargs["type"] = ContractType(requested_type)
+                if page_token:
+                    request_kwargs["page_token"] = page_token
+
+                contracts_resp = self._trading.get_option_contracts(
+                    GetOptionContractsRequest(**request_kwargs)
+                )
+                option_contracts.extend(getattr(contracts_resp, "option_contracts", []) or [])
+                page_token = getattr(contracts_resp, "next_page_token", None)
+                if not page_token:
+                    break
+        except Exception as exc:  # noqa: BLE001 - market data failure must not stop the pipeline
+            logger.warning("option contract fetch failed for %s: %s", symbol, exc)
+            return OptionChainSlice(underlying=symbol, fetched_at=fetched_at, contracts=())
+
+        if not option_contracts:
+            return OptionChainSlice(underlying=symbol, fetched_at=fetched_at, contracts=())
 
         chain_req = OptionChainRequest(
             underlying_symbol=symbol,
@@ -159,17 +163,15 @@ class AlpacaBrokerAdapter:
         )
         try:
             snapshots = self._option_data.get_option_chain(chain_req)
-        except Exception as exc:  # noqa: BLE001 - snapshot feed failing shouldn't crash the whole scan
-            logger.warning("get_option_chain snapshot fetch failed for %s: %s", symbol, exc)
+        except Exception as exc:  # noqa: BLE001 - snapshot failure must not stop the pipeline
+            logger.warning("option snapshot fetch failed for %s: %s", symbol, exc)
             snapshots = {}
 
         contracts = tuple(
             self._normalize_contract(symbol, meta, snapshots.get(meta.symbol))
-            for meta in contract_meta
+            for meta in option_contracts
         )
-        return OptionChainSlice(
-            underlying=symbol, fetched_at=datetime.now(timezone.utc).isoformat(), contracts=contracts
-        )
+        return OptionChainSlice(underlying=symbol, fetched_at=fetched_at, contracts=contracts)
 
     @staticmethod
     def _normalize_contract(underlying: str, meta, snapshot) -> "OptionContract":
@@ -231,57 +233,92 @@ class AlpacaBrokerAdapter:
 
     # ── Execution ─────────────────────────────────────────────────────
     def submit_order(self, *, legs, quantity, client_order_id, limit_price) -> OrderResult:
-        """
-        Multi-leg options order submission, grounded in Alpaca's own
-        official example notebooks (options-bull-call-spread.ipynb,
-        options-iron-condor.ipynb — both current on alpacahq/alpaca-py
-        master as of this research): MarketOrderRequest/LimitOrderRequest
-        with order_class=OrderClass.MLEG and a `legs=[OptionLegRequest(...)]`
-        list. All four of this project's strategies are 2- or 4-leg, so
-        MLEG is used unconditionally here.
-
-        NOT LIVE-VERIFIED. See Phase C report.
-        """
-        if self.settings.alpaca_env.value == "live":
+        """Submit a paper-only single-leg or multi-leg option order."""
+        if self.settings.alpaca_env.value != "paper":
             raise LiveTradingDisabledError("Live order submission is not implemented in this build.")
 
-        from alpaca.trading.enums import OrderClass
-        from alpaca.trading.enums import OrderSide as AlpacaOrderSide
-        from alpaca.trading.enums import TimeInForce
-        from alpaca.trading.requests import LimitOrderRequest, MarketOrderRequest, OptionLegRequest
+        submitted_at = datetime.now(timezone.utc)
+        order_class = "SINGLE"
+        try:
+            from alpaca.trading.enums import OrderClass
+            from alpaca.trading.enums import OrderSide as AlpacaOrderSide
+            from alpaca.trading.enums import TimeInForce
+            from alpaca.trading.requests import LimitOrderRequest, MarketOrderRequest, OptionLegRequest
 
-        order_legs = [
-            OptionLegRequest(
-                symbol=leg.contract.symbol,
-                side=AlpacaOrderSide.BUY if leg.side == "BUY" else AlpacaOrderSide.SELL,
-                ratio_qty=leg.quantity,
+            if not legs:
+                raise ValueError("an option order requires at least one leg")
+
+            def leg_value(leg, key, default=None):
+                if isinstance(leg, dict):
+                    return leg.get(key, default)
+                if key == "symbol":
+                    contract = getattr(leg, "contract", None)
+                    return getattr(contract, "symbol", getattr(leg, "symbol", default))
+                return getattr(leg, key, default)
+
+            def alpaca_side(leg):
+                side = str(getattr(leg_value(leg, "side"), "value", leg_value(leg, "side"))).upper()
+                if side == "BUY":
+                    return AlpacaOrderSide.BUY
+                if side == "SELL":
+                    return AlpacaOrderSide.SELL
+                raise ValueError(f"unsupported option leg side: {side}")
+
+            if len(legs) == 1:
+                leg = legs[0]
+                leg_quantity = int(leg_value(leg, "quantity", 1))
+                request = MarketOrderRequest(
+                    symbol=leg_value(leg, "symbol"),
+                    qty=int(quantity) * leg_quantity,
+                    side=alpaca_side(leg),
+                    time_in_force=TimeInForce.DAY,
+                    client_order_id=client_order_id,
+                )
+            else:
+                if not 2 <= len(legs) <= 4:
+                    raise ValueError("Alpaca multi-leg option orders require two to four legs")
+                order_class = "MLEG"
+                order_legs = [
+                    OptionLegRequest(
+                        symbol=leg_value(leg, "symbol"),
+                        side=alpaca_side(leg),
+                        ratio_qty=int(leg_value(leg, "quantity", 1)),
+                    )
+                    for leg in legs
+                ]
+                request_kwargs = {
+                    "qty": int(quantity),
+                    "order_class": OrderClass.MLEG,
+                    "time_in_force": TimeInForce.DAY,
+                    "legs": order_legs,
+                    "client_order_id": client_order_id,
+                }
+                request = (
+                    LimitOrderRequest(limit_price=limit_price, **request_kwargs)
+                    if limit_price is not None
+                    else MarketOrderRequest(**request_kwargs)
+                )
+
+            result = self._trading.submit_order(request)
+            filled_qty_raw = getattr(result, "filled_qty", None)
+            return OrderResult(
+                order_id=str(result.id),
+                client_order_id=str(result.client_order_id),
+                status=str(result.status),
+                filled_qty=int(float(filled_qty_raw)) if filled_qty_raw else 0,
+                submitted_at=getattr(result, "submitted_at", None) or submitted_at,
+                raw={"order_class": order_class, "legs": len(legs)},
             )
-            for leg in legs
-        ]
-
-        request_kwargs = dict(
-            qty=quantity,
-            order_class=OrderClass.MLEG,
-            time_in_force=TimeInForce.DAY,
-            legs=order_legs,
-            client_order_id=client_order_id,
-        )
-        request = (
-            LimitOrderRequest(limit_price=limit_price, **request_kwargs)
-            if limit_price is not None
-            else MarketOrderRequest(**request_kwargs)
-        )
-
-        result = self._trading.submit_order(request)
-        filled_qty_raw = getattr(result, "filled_qty", None)
-        return OrderResult(
-            order_id=str(result.id),
-            client_order_id=str(result.client_order_id),
-            status=str(result.status),
-            filled_qty=int(float(filled_qty_raw)) if filled_qty_raw else 0,
-            submitted_at=result.submitted_at,
-            raw={"order_class": "MLEG", "legs": len(order_legs)},
-        )
+        except Exception as exc:  # noqa: BLE001 - preserve the pipeline journal on broker failures
+            logger.warning("paper order submission failed for %s: %s", client_order_id, exc)
+            return OrderResult(
+                order_id="",
+                client_order_id=client_order_id,
+                status="rejected",
+                filled_qty=0,
+                submitted_at=submitted_at,
+                raw={"order_class": order_class, "legs": len(legs), "error": str(exc)},
+            )
 
     def health_check(self) -> dict[str, str]:
         status: dict[str, str] = {}

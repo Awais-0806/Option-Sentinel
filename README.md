@@ -1,128 +1,140 @@
 # OptionSentinel
 
-**An autonomous options trader that thinks in regimes, trades in defined risk, and gives the Risk Sentinel the final veto.**
+**A regime-aware, defined-risk options system with an independent Risk Sentinel veto.**
 
 Built for the Alpaca AI Trading Agents Hackathon.
 
-## What is OptionSentinel?
+## What it does
 
-OptionSentinel is a regime-aware, multi-agent autonomous options trading system. It classifies market conditions with deterministic technical signals (not an LLM guess), selects from four defined-risk options strategies, scores each candidate trade transparently, and — critically — runs every candidate through a **Risk Sentinel** with independent, LLM-free veto authority. A high trade score does not guarantee execution; the Risk Sentinel can and does reject trades that score well but violate portfolio-level risk limits.
-
-## Why it's different
-
-Most LLM trading bot demos ask a language model "should I buy this?" and act on the answer. OptionSentinel doesn't. The number-crunching — regime classification, trade scoring, position sizing, risk limits, duplicate-order prevention — is all deterministic code. The LLM layer (where used) explains and narrates; it never decides. See `docs/ARCHITECTURE.md` for the full breakdown of what's deterministic vs. LLM-assisted.
-
-## How autonomous agents work
-
-```
-Market Scout → Regime Analyst → Options Analyst → Strategy Agent
-    → Risk Sentinel → Execution Agent → Portfolio Monitor → Exit Agent
-```
-
-Each stage is a separate, testable module. `core/orchestration/pipeline.py` wires them together for the end-to-end dry run. See `docs/ARCHITECTURE.md` for what each agent owns.
-
-## How options strategies work
-
-Four strategies, each strategy-eligible only under specific regime conditions:
+OptionSentinel classifies market conditions with deterministic technical signals, selects one of four defined-risk options strategies, scores each candidate transparently, and sends every candidate through a separate, LLM-free Risk Sentinel. A high score never overrides portfolio, liquidity, concentration, drawdown, or circuit-breaker rules.
 
 | Strategy | Eligible regime | Risk profile |
 |---|---|---|
-| Bull Call Spread | BULLISH | Defined risk, debit |
-| Bear Put Spread | BEARISH | Defined risk, debit |
-| Iron Condor | RANGE + elevated IV | Defined risk, credit |
-| Long Volatility (straddle) | HIGH_VOLATILITY, high confidence only | Defined risk on entry, capped debit |
+| Bull Call Spread | BULLISH | Defined-risk debit spread |
+| Bear Put Spread | BEARISH | Defined-risk debit spread |
+| Iron Condor | RANGE with elevated IV | Defined-risk credit spread |
+| Long Volatility | HIGH_VOLATILITY with high confidence | Capped debit |
 
-The system is deliberately selective — see `strategies/long_volatility.py` for the strictest example; it will not fire on every high-volatility reading, only on high-confidence ones, per the "strict maximum-risk control" requirement.
+The numerical decision path—regime classification, scoring, sizing, strategy construction, and risk verdicts—is deterministic code. An LLM is only an optional explanatory seam and is never in the execution decision path.
 
-## How risk controls work
+## Paper-only safety boundary
 
-`risk/limits.py` defines 13 independent, deterministic rules (buying power, max trade/portfolio risk, concentration, drawdown, daily loss, liquidity, duplicate orders, stale data, contract sanity, and more). `risk/veto.py`'s `RiskSentinel` runs all of them and issues one of four verdicts:
+`EXECUTION_MODE` is the only selector for the broker adapter and submission behavior:
 
-- **APPROVE** — trade proceeds as sized
-- **REDUCE_SIZE** — trade proceeds at a smaller, affordable quantity
-- **REJECT** — trade is blocked, with itemized reasons
-- **EMERGENCY_HALT** — account-wide circuit breaker trips (drawdown, daily loss, or repeated rejections); no new entries regardless of trade quality
+| Mode | Data/account adapter | Submission behavior |
+|---|---|---|
+| `DRY_RUN` (default) | Deterministic mock | Never submits or calls Alpaca |
+| `PAPER_SIMULATION` | Deterministic mock | Never submits or calls Alpaca |
+| `PAPER_MANUAL_APPROVAL` | Real Alpaca paper adapter | Builds and risk-checks trades, then stops before submission |
+| `PAPER_AUTONOMOUS` | Real Alpaca paper adapter | Can submit approved orders to an Alpaca **paper** account |
+| `LIVE` | None | Hard-blocked unconditionally |
 
-This is independently tested in `tests/unit/test_risk.py`, including a direct regression test proving a high-scoring trade can still be rejected on concentration risk.
+The adapter refuses every non-paper endpoint, and `LIVE` raises before an adapter can be created. No flag, credential, or confirmation value enables live trading in this build. For a safe demo, leave `EXECUTION_MODE=DRY_RUN`.
 
-## How Alpaca is integrated
+## Alpaca integration
 
-`core/interfaces/broker.py` defines a `BrokerAdapter` Protocol. Nothing in `agents/`, `strategies/`, `risk/`, or `core/orchestration/` imports Alpaca directly — they depend only on this interface. Two implementations exist:
+The `BrokerAdapter` protocol keeps the engine separate from Alpaca-specific code. The paper adapter:
 
-- `integrations/alpaca/adapter.py` — real Alpaca paper/live REST calls via `alpaca-py`
-- `integrations/alpaca/mock_adapter.py` — deterministic synthetic data, used by default in `DRY_RUN` and by every test in this repo
+- retrieves paginated active option-contract metadata and combines it with option snapshots;
+- maps quote, trade, Greeks, IV, and metadata fields into the internal option model;
+- builds one-leg market orders and 2–4 leg MLEG orders; and
+- maps malformed requests and broker failures to rejected order results.
 
-This means the exact same pipeline code runs whether you have credentials configured or not.
+Offline adapter mapping tests and a read-only `PAPER_MANUAL_APPROVAL` paper-account check have succeeded. Option-chain data, market-data entitlements, and paper-order submission remain unverified; no paper order has been placed as part of this project handoff.
 
-## How MCP is integrated
-
-`integrations/alpaca_mcp/client.py` documents the seam for driving OptionSentinel's data through an MCP-connected agent session. The autonomous pipeline itself does not depend on MCP — see `docs/ARCHITECTURE.md`, "MCP Architecture."
-
-## How CLI is integrated
-
-`integrations/alpaca_cli/cli.py` detects and health-checks the Alpaca CLI if installed (`alpaca version`, `alpaca doctor`). The application never depends on the CLI being present — `python -m scripts.health_check` reports clearly if it's missing, with an install hint, and continues.
-
-## How to run locally
+## Local setup
 
 ```bash
 git clone <this-repo>
 cd optionsentinel
-cp .env.example .env          # defaults are safe — paper env, DRY_RUN mode
-make install                  # or: pip install -e . --break-system-packages
-make health                   # python -m scripts.health_check
+cp .env.example .env
+make dev-install
+make health
 ```
 
-With no credentials configured, `health` and the pipeline both fall back to the mock adapter automatically — you can exercise the full system before ever touching Alpaca.
+The default `.env` is safe: `ALPACA_ENV=paper` and `EXECUTION_MODE=DRY_RUN`. `make health` uses the mock adapter in either mock mode and makes no network calls.
 
-Once you have paper credentials, add them to `.env` and re-run `make health` — it will report real `ALPACA_CONNECTION` / `ACCOUNT` / `MARKET_DATA` status. `OPTIONS_DATA` retrieval against the real API is not yet implemented (see Known Limitations).
+To use a real Alpaca **paper** account, set exactly one supported credential scheme in `.env`:
 
-## How to use paper trading
+```dotenv
+APCA_API_KEY_ID=your_paper_key
+APCA_API_SECRET_KEY=your_paper_secret
+# Legacy aliases also work: ALPACA_API_KEY and ALPACA_SECRET_KEY.
+```
 
-`ALPACA_ENV=paper` in `.env` (default). The system refuses to run against a live endpoint unless **both** `ALPACA_ENV=live` and `ALPACA_LIVE_TRADING_CONFIRMED=true` are set — and even then, no live order path is implemented in this build. See `integrations/alpaca/adapter.py`'s `LiveTradingDisabledError`.
+Then explicitly set `EXECUTION_MODE=PAPER_MANUAL_APPROVAL` for read-only pipeline validation. Do not use `PAPER_AUTONOMOUS` for the demo; it is the only mode that can submit a paper order.
 
-## How to run tests
+## Tests and checks
 
 ```bash
-make dev-install
-make test           # everything
-make test-unit      # regime, scoring, risk, strategies, failure modes
-make test-sim        # full offline dry-run pipeline
-make test-integration  # requires real paper credentials; auto-skips otherwise
+make test-unit
+make test-backtest
+make test-sim
+pytest -v --ignore=tests/integration  # complete offline suite
+make lint
 ```
 
-## How to enable dry-run / how to safely execute paper trades
+Credentialed checks are opt-in and separate:
 
-`EXECUTION_MODE` in `.env` has five values, and it is the **single source of truth** for both adapter selection (`integrations/broker_factory.py`) and order-submission gating (`core/orchestration/pipeline.py`):
+```bash
+make test-integration
+```
 
-| Mode | Adapter | Submits orders? |
-|---|---|---|
-| `DRY_RUN` (default) | Mock | Never |
-| `PAPER_SIMULATION` | Mock | Never |
-| `PAPER_MANUAL_APPROVAL` | Real Alpaca (paper) | Never — builds & risk-checks real trades, then stops and waits (approval UI not yet built; see Known Limitations) |
-| `PAPER_AUTONOMOUS` | Real Alpaca (paper) | Yes, for APPROVE/REDUCE_SIZE verdicts |
-| `LIVE` | — | Hard-blocked unconditionally, no exceptions |
+The integration suite auto-skips without credentials. Its order-submission test has a second explicit environment gate and is intentionally a documented no-op until a manual approval workflow exists.
 
-The operator must explicitly change `EXECUTION_MODE` — the system never escalates itself. `PAPER_MANUAL_APPROVAL`/`PAPER_AUTONOMOUS` also refuse to start if `ALPACA_API_KEY`/`ALPACA_SECRET_KEY` are missing or still contain the `.env.example` placeholder values — see `integrations/broker_factory.py`.
+## API demo
 
-## Architecture diagram
+Start the local API with the safe default:
 
-See `docs/ARCHITECTURE.md`.
+```bash
+make run
+```
 
-## Demo flow
+In another terminal:
 
-1. `make health` — show Alpaca/CLI connectivity
-2. `python -c "from core.orchestration.pipeline import run_pipeline; ..."` (or hit `POST /pipeline/run` once `make run` is up) across the watchlist
-3. Walk through the resulting trade journal — highlight at least one `APPROVE` and one `REJECT`/`REDUCE_SIZE` to demonstrate the veto
-4. Show `tests/unit/test_risk.py::test_high_score_trade_can_still_be_rejected_on_concentration` passing live
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/account
+curl -X POST http://127.0.0.1:8000/pipeline/run \
+  -H "Content-Type: application/json" \
+  -d '{"symbols":["SPY"]}'
+```
 
-## Known limitations (Day 1, honest accounting)
+In `DRY_RUN`, `/health` and `/pipeline/run` report `data_source: "MOCK"`; the pipeline exercises the same deterministic strategy and Risk Sentinel code without contacting Alpaca.
 
-- Real Alpaca **option chain** retrieval (`integrations/alpaca/adapter.py::get_option_chain`) is stubbed — needs real paper credentials to build and verify against actual response shapes. The mock adapter's synthetic chain generator stands in for it everywhere else.
-- Real order submission (`AlpacaBrokerAdapter.submit_order`) is stubbed for the same reason — multi-leg options order construction needs to be verified against live paper responses before it's trustworthy.
-- No frontend dashboard yet — `apps/api/main.py` exposes the JSON endpoints (`/health`, `/account`, `/pipeline/run`) a dashboard would consume, but no UI is built.
-- Persistence layer (`data/persistence/`) is fully modeled but not yet wired into the live pipeline run — currently the pipeline returns an in-memory `PipelineResult`.
-- News/catalyst scoring input is a placeholder (always 0) — no news feed is wired in yet.
-- `probability_estimate` is currently always `None` — no probability-of-profit model has been built.
+## Backtest
+
+Run the fixed-seed synthetic experiment:
+
+```bash
+python -m scripts.run_backtest \
+  --symbol SPY \
+  --start 2025-06-01 \
+  --end 2026-03-20 \
+  --data synthetic
+```
+
+The command writes a deterministic JSON report to `data/historical/` with strategy metrics, cost sensitivity, and a matching buy-and-hold benchmark. The directory is intentionally ignored because it can contain fetched local market data. See [reports/performance.md](reports/performance.md) for the exact synthetic comparison, assumptions, and limitations.
+
+## Three-to-five-minute demo
+
+1. Run `make health` and show `EXECUTION_MODE: DRY_RUN` with a mock source.
+2. Start the API, call `/health` and `/account`, then run `POST /pipeline/run` for `SPY`.
+3. Walk through the pipeline summary and one candidate’s Risk Sentinel verdict; explain that a strong score still cannot bypass risk controls.
+4. Run `make test-backtest` or the synthetic backtest command and open `reports/performance.md`.
+5. Point out the execution-mode table: the demo is mock-only, paper execution is explicit, and live execution is impossible in this build.
+
+## Known limitations
+
+- A read-only `PAPER_MANUAL_APPROVAL` check successfully retrieved a paper-account snapshot. Option-chain behavior, market-data entitlements, and order submission remain unverified; offline SDK-shape tests are not a replacement for those checks.
+- Snapshot `latest_trade.size` is a latest-print proxy, not confirmed cumulative daily option volume.
+- Alpaca historical option bars omit historical bid/ask, IV, Greeks, and open-interest series. The backtest capability gate refuses unsupported data rather than inventing those fields; see [docs/ALPACA_DATA_CAPABILITY_MATRIX.md](docs/ALPACA_DATA_CAPABILITY_MATRIX.md).
+- There is no dashboard, persistence wiring for pipeline runs, or live exit-management workflow. Positions in the default backtest hold to expiration; positions still open at the sample end are reported separately.
+- There is no manual-approval UI or CLI. `PAPER_MANUAL_APPROVAL` intentionally stops before submission.
+
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the pipeline, safety gates, data caveats, and deterministic/LLM boundary.
 
 ## License
 

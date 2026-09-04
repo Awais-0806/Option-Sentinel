@@ -14,6 +14,7 @@ COPY risk ./risk
 COPY integrations ./integrations
 COPY data ./data
 COPY apps ./apps
+COPY backtest ./backtest
 COPY scripts ./scripts
 
 RUN pip install --no-cache-dir -e .

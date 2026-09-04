@@ -49,16 +49,17 @@ def get_broker_adapter(settings: Settings) -> BrokerAdapter:
             )
         if not (settings.alpaca_api_key and settings.alpaca_secret_key):
             raise BrokerConfigurationError(
-                f"{mode.value} requires ALPACA_API_KEY and ALPACA_SECRET_KEY to be set "
-                "to real paper credentials in .env. Switch EXECUTION_MODE back to "
-                "DRY_RUN to run without credentials."
+                f"{mode.value} requires APCA_API_KEY_ID/APCA_API_SECRET_KEY (or legacy "
+                "ALPACA_API_KEY/ALPACA_SECRET_KEY) to be set to real paper credentials in "
+                ".env. Switch EXECUTION_MODE back to DRY_RUN to run without credentials."
             )
         placeholder_markers = ("your_paper_api_key_here", "your_paper_secret_key_here")
         if settings.alpaca_api_key in placeholder_markers or settings.alpaca_secret_key in placeholder_markers:
             raise BrokerConfigurationError(
-                f"{mode.value} is configured but ALPACA_API_KEY/ALPACA_SECRET_KEY still "
-                "contain the placeholder values from .env.example. Replace them with your "
-                "real Alpaca paper credentials, or switch EXECUTION_MODE back to DRY_RUN."
+                f"{mode.value} is configured but APCA_API_KEY_ID/APCA_API_SECRET_KEY (or "
+                "legacy ALPACA_API_KEY/ALPACA_SECRET_KEY) still contain the placeholder values "
+                "from .env.example. Replace them with real Alpaca paper credentials, or switch "
+                "EXECUTION_MODE back to DRY_RUN."
             )
         from integrations.alpaca.adapter import AlpacaBrokerAdapter
         return AlpacaBrokerAdapter(settings)

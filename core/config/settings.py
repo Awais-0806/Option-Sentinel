@@ -11,7 +11,7 @@ from __future__ import annotations
 from enum import Enum
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,7 +60,9 @@ class DeployStage(str, Enum):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", populate_by_name=True
+    )
 
     # ── Environment / safety ────────────────────────────────
     alpaca_env: AlpacaEnv = Field(default=AlpacaEnv.PAPER, alias="ALPACA_ENV")
@@ -69,8 +71,12 @@ class Settings(BaseSettings):
     execution_mode: ExecutionMode = Field(default=ExecutionMode.DRY_RUN, alias="EXECUTION_MODE")
 
     # ── Alpaca credentials ───────────────────────────────────
-    alpaca_api_key: str = Field(default="", alias="ALPACA_API_KEY")
-    alpaca_secret_key: str = Field(default="", alias="ALPACA_SECRET_KEY")
+    alpaca_api_key: str = Field(
+        default="", validation_alias=AliasChoices("APCA_API_KEY_ID", "ALPACA_API_KEY")
+    )
+    alpaca_secret_key: str = Field(
+        default="", validation_alias=AliasChoices("APCA_API_SECRET_KEY", "ALPACA_SECRET_KEY")
+    )
     alpaca_paper_base_url: str = Field(
         default="https://paper-api.alpaca.markets", alias="ALPACA_PAPER_BASE_URL"
     )

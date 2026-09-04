@@ -1,6 +1,6 @@
 # Alpaca Options Data — Capability Matrix
 
-**Version caveat, stated once, applies to the whole document**: this matrix is built from Alpaca's current public API reference pages and official example notebooks (researched via web search — see citations at the bottom), NOT from an installed copy of `alpaca-py`. I do not have network access to run `pip show alpaca-py` or exercise the SDK in this sandbox, so I **cannot confirm this matches version `0.44.0` specifically** — Alpaca's docs site does not appear to version-pin its content by SDK release. **You must verify this table against your own installed version** (`pip show alpaca-py`) before trusting it for anything beyond "what to try first."
+**Validation caveat, stated once, applies to the whole document**: the request and model surface was checked offline against the installed `alpaca-py` SDK targeted by this project (`>=0.44.0`), and the field claims below are grounded in Alpaca's public API reference and example notebooks. A read-only `PAPER_MANUAL_APPROVAL` check retrieved a paper-account snapshot, but it did not exercise option data or orders. Offline construction and that account-only check do **not** validate option-data responses, market-data entitlements, or order behavior, so verify each row with a paper account before treating it as operational evidence.
 
 | Field | Live snapshot (`get_option_chain` / `get_option_snapshot`) | Historical bars (`get_option_bars`) | Contract metadata (`get_option_contracts`) | Required by our strategies | Available for backtesting? |
 |---|---|---|---|---|---|
@@ -23,7 +23,7 @@
 
 **Practical consequence for the backtest**: a real historical dataset built purely from `get_option_bars()` cannot support a bid/ask-spread-aware fill model, cannot support IV-based strategy logic, and cannot support a historical open-interest time series. This project's strategies don't use IV/Greeks directly (they use moneyness-based strike selection), so that gap doesn't block strategy *construction* — but it does block realistic *spread cost* modeling for a real-data backtest specifically. See `backtest/data_capability.py` for the machine-readable gate that checks this before a backtest run, and returns `NOT_EVALUATABLE` rather than silently proceeding, per your explicit instruction.
 
-**I have not verified any row of this table against a live account.** It is built from documentation, not execution.
+**No row of this matrix has been verified through an authenticated paper or live Alpaca option-data endpoint.** The completed account-only check does not validate these fields; operational behavior remains to be tested with a paper account.
 
 ## Sources
 - `alpaca.markets/sdks/python/api_reference/data/option/historical.html` — `get_option_bars`, `get_option_chain` signatures

@@ -18,3 +18,14 @@ node_modules/
 logs/*.log
 *.zip
 .DS_Store
+
+# Local environment files; retain the safe checked-in template.
+.env.*
+!.env.example
+
+# Fetched market data and generated backtest/capability artifacts.
+data/historical/*
+!data/historical/.gitkeep
+data/market/raw/
+reports/backtest_*.json
+reports/*_capability_report.*
